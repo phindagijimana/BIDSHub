@@ -6,7 +6,9 @@ A professional BIDS dataset management tool with Pennsieve integration.
 
 import streamlit as st
 import os
+import pandas as pd
 from pathlib import Path
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -361,7 +363,102 @@ def page_subjects():
     st.markdown('<h1 class="main-header">Subjects</h1>', 
                 unsafe_allow_html=True)
     
-    st.info("Subject browser coming in next commit...")
+    if not st.session_state.db:
+        st.warning("Please complete setup first")
+        return
+    
+    # Search and filters
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        search = st.text_input(
+            "Search subjects",
+            value=st.session_state.search_query,
+            placeholder="TBI011007",
+            key="subject_search"
+        )
+        st.session_state.search_query = search
+    
+    with col2:
+        qc_filter = st.selectbox(
+            "QC Status",
+            options=['all', 'pending', 'pass', 'fail', 'needs_review'],
+            index=0,
+            key="qc_filter_select"
+        )
+    
+    with col3:
+        session_filter = st.selectbox(
+            "Session",
+            options=['all', '2WK', '6MO', 'both'],
+            index=0,
+            key="session_filter_select"
+        )
+    
+    # Get subjects from database
+    filters = {}
+    if qc_filter != 'all':
+        filters['qc_status'] = qc_filter
+    
+    subjects = st.session_state.db.get_all_subjects(filters)
+    
+    # Apply additional filters
+    from src.utils import filter_subjects, create_subject_dataframe
+    
+    filter_criteria = {
+        'search': search,
+        'session': session_filter if session_filter != 'all' else None,
+    }
+    
+    filtered_subjects = filter_subjects(subjects, filter_criteria)
+    
+    # Display count
+    st.caption(f"Showing {len(filtered_subjects)} of {len(subjects)} subjects")
+    
+    if not filtered_subjects:
+        st.info("No subjects match the filters")
+        return
+    
+    # Create DataFrame for display
+    df = create_subject_dataframe(filtered_subjects)
+    
+    # Display table with selection
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        height=400
+    )
+    
+    # Subject selection for detail view
+    st.markdown("---")
+    st.markdown("### View Subject Details")
+    
+    subject_ids = [s['subject_id'] for s in filtered_subjects]
+    selected = st.selectbox(
+        "Select subject to view",
+        options=subject_ids,
+        index=0 if subject_ids else None,
+        key="selected_subject_view"
+    )
+    
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("View Details", use_container_width=True):
+            st.session_state.selected_subject = selected
+            st.session_state.current_page = 'subject_detail'
+            st.rerun()
+    
+    with col2:
+        if st.button("Export Filtered List", use_container_width=True):
+            from src.utils import export_to_csv
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name=f"subjects_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
 
 
 def page_downloads():
@@ -378,6 +475,161 @@ def page_qc():
                 unsafe_allow_html=True)
     
     st.info("QC dashboard coming in Phase 4...")
+
+
+def page_subject_detail():
+    """Subject detail page."""
+    subject_id = st.session_state.selected_subject
+    
+    if not subject_id:
+        st.warning("No subject selected")
+        if st.button("← Back to Subjects"):
+            st.session_state.current_page = 'subjects'
+            st.rerun()
+        return
+    
+    # Header with back button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f'<h1 class="main-header">Subject: {subject_id}</h1>', 
+                    unsafe_allow_html=True)
+    with col2:
+        if st.button("← Back to Subjects", use_container_width=True):
+            st.session_state.current_page = 'subjects'
+            st.rerun()
+    
+    # Get subject data
+    subject = st.session_state.db.get_subject(subject_id)
+    if not subject:
+        st.error("Subject not found")
+        return
+    
+    # QC Status Section
+    st.markdown('<h2 class="section-header">Quality Control</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        new_qc_status = st.selectbox(
+            "QC Status",
+            options=['pending', 'pass', 'fail', 'needs_review'],
+            index=['pending', 'pass', 'fail', 'needs_review'].index(
+                subject.get('qc_status', 'pending')
+            ),
+            key="subject_qc_status"
+        )
+    
+    with col2:
+        flagged = st.checkbox(
+            "Flag for review",
+            value=subject.get('flagged', False),
+            key="subject_flagged"
+        )
+    
+    with col3:
+        st.write("")
+        st.write("")
+        if st.button("Update QC Status", use_container_width=True):
+            success = st.session_state.db.update_subject_qc(
+                subject_id=subject_id,
+                qc_status=new_qc_status,
+                notes=st.session_state.get('qc_notes_text', ''),
+                reviewed_by="user",
+                flagged=flagged
+            )
+            if success:
+                st.success("✓ QC status updated")
+                st.rerun()
+            else:
+                st.error("Failed to update QC status")
+    
+    # QC Notes
+    qc_notes = st.text_area(
+        "QC Notes",
+        value=subject.get('qc_notes', ''),
+        height=100,
+        key="qc_notes_text"
+    )
+    
+    # Session scans
+    if not st.session_state.bids_loader:
+        st.warning("BIDS loader not initialized")
+        return
+    
+    # Session 2WK
+    if subject.get('has_2wk'):
+        st.markdown("---")
+        st.markdown('<h2 class="section-header">Session 2WK</h2>', 
+                    unsafe_allow_html=True)
+        
+        scans_2wk = st.session_state.bids_loader.get_subject_scans(
+            subject_id, '2WK'
+        )
+        
+        if scans_2wk:
+            scan_data = []
+            for scan in scans_2wk:
+                from src.utils import format_file_size
+                file_size = st.session_state.bids_loader.get_file_size(
+                    scan['file_path']
+                )
+                is_stub = st.session_state.bids_loader.is_stub_file(
+                    scan['file_path']
+                )
+                
+                scan_data.append({
+                    'Scan': scan.get('suffix', 'unknown'),
+                    'Modality': scan.get('modality', ''),
+                    'Size': format_file_size(file_size),
+                    'Status': 'Stub' if is_stub else 'Downloaded',
+                    'File': Path(scan['file_path']).name
+                })
+            
+            df_2wk = pd.DataFrame(scan_data)
+            st.dataframe(df_2wk, use_container_width=True, hide_index=True)
+            
+            if st.button("Download All 2WK", key="dl_2wk"):
+                st.info("Download functionality coming in Phase 3")
+        else:
+            st.info("No scans found for session 2WK")
+    
+    # Session 6MO
+    if subject.get('has_6mo'):
+        st.markdown("---")
+        st.markdown('<h2 class="section-header">Session 6MO</h2>', 
+                    unsafe_allow_html=True)
+        
+        scans_6mo = st.session_state.bids_loader.get_subject_scans(
+            subject_id, '6MO'
+        )
+        
+        if scans_6mo:
+            scan_data = []
+            for scan in scans_6mo:
+                from src.utils import format_file_size
+                file_size = st.session_state.bids_loader.get_file_size(
+                    scan['file_path']
+                )
+                is_stub = st.session_state.bids_loader.is_stub_file(
+                    scan['file_path']
+                )
+                
+                scan_data.append({
+                    'Scan': scan.get('suffix', 'unknown'),
+                    'Modality': scan.get('modality', ''),
+                    'Size': format_file_size(file_size),
+                    'Status': 'Stub' if is_stub else 'Downloaded',
+                    'File': Path(scan['file_path']).name
+                })
+            
+            df_6mo = pd.DataFrame(scan_data)
+            st.dataframe(df_6mo, use_container_width=True, hide_index=True)
+            
+            if st.button("Download All 6MO", key="dl_6mo"):
+                st.info("Download functionality coming in Phase 3")
+        else:
+            st.info("No scans found for session 6MO")
 
 
 def page_export():
@@ -405,6 +657,8 @@ def main():
         page_dashboard()
     elif page == 'subjects':
         page_subjects()
+    elif page == 'subject_detail':
+        page_subject_detail()
     elif page == 'downloads':
         page_downloads()
     elif page == 'qc':
