@@ -8,12 +8,27 @@ Data Explorer is a web-based application for exploring, managing, and downloadin
 
 ## Features
 
-- **Dataset Exploration**: Browse subjects, sessions, and scans
-- **Data Completeness Tracking**: Monitor session and modality coverage
-- **Quality Control Workflow**: Track QC status, add notes, flag subjects
-- **Download Manager**: Selective downloads with progress tracking
-- **Pennsieve Integration**: Direct cloud access to imaging files
-- **Export Capabilities**: Export subject lists and QC reports
+### ✅ Completed (v1.0 MVP)
+
+- **Dataset Setup**: One-time initialization with progress tracking
+- **Dashboard**: Real-time statistics and overview metrics
+- **Subject Browser**: Search, filter, and browse all subjects
+- **Subject Detail**: View scans for each subject with QC controls
+- **Quality Control Workflow**: 
+  - Track QC status (pending/pass/fail/needs review)
+  - Add notes and flag subjects
+  - QC history tracking
+  - Bulk QC updates
+  - Export QC reports
+- **Download Manager**: 
+  - Selective downloads from Pennsieve
+  - Queue management
+  - Concurrent downloads (3 simultaneous)
+  - Progress tracking
+  - Start/pause/resume controls
+- **Pennsieve Integration**: Direct cloud access to imaging files with real file sizes
+- **Export Capabilities**: Export subject lists and QC reports to CSV
+- **Professional UI**: Chase Bank-inspired navy blue and white theme
 
 ## Tech Stack
 
@@ -67,7 +82,14 @@ PENNSIEVE_DATASET_NAME=your_dataset_name
 
 ## Usage
 
+### Starting the Application
+
 ```bash
+# Activate virtual environment
+source venv/bin/activate  # Mac/Linux
+# OR
+venv\Scripts\activate     # Windows
+
 # Start the application
 streamlit run app.py
 ```
@@ -76,11 +98,56 @@ The application will open in your browser at `http://localhost:8501`
 
 ### First-Time Setup
 
-1. Launch the app
-2. Enter your BIDS directory path
-3. Enter Pennsieve credentials
-4. Click "Initialize Dataset"
-5. Wait for indexing to complete
+1. **Launch the app** - Run `streamlit run app.py`
+2. **Enter BIDS directory path** - Path to your local BIDS dataset
+3. **Enter Pennsieve credentials**:
+   - Dataset name (e.g., "TrackTBI")
+   - API Key
+   - API Secret
+4. **Click "Initialize Dataset"**
+5. **Wait for indexing** - Progress bar shows 5 steps:
+   - Verify BIDS directory
+   - Connect to Pennsieve
+   - Load BIDS dataset
+   - Initialize database
+   - Index all subjects
+6. **Dashboard opens automatically** when complete
+
+### Workflow
+
+#### 1. Dashboard
+- View overview metrics (subjects, sessions, scans)
+- Check data completeness
+- Monitor QC status
+- Quick access to all features
+
+#### 2. Browse Subjects
+- Search by subject ID
+- Filter by QC status
+- Filter by session (2WK/6MO/both)
+- Export filtered list to CSV
+- Click subject to view details
+
+#### 3. Subject Detail
+- View scans for each session
+- Update QC status
+- Add QC notes
+- Flag for review
+- Add scans to download queue
+
+#### 4. Download Manager
+- View download queue
+- Check storage estimation
+- Start/pause/resume downloads
+- Monitor progress
+- Clear queue
+
+#### 5. QC Dashboard
+- View QC statistics
+- Filter by status
+- Bulk update QC status
+- View recent activity
+- Export QC report
 
 ## Project Structure
 
@@ -155,9 +222,74 @@ Contributions welcome! Please open an issue or submit a pull request.
 
 For issues or questions, please open a GitHub issue.
 
+## Troubleshooting
+
+### Setup Issues
+
+**"BIDS directory not found"**
+- Check the path is correct
+- Ensure you have read permissions
+- Path should point to the root of your BIDS dataset
+
+**"Failed to connect to Pennsieve"**
+- Verify your API credentials
+- Check internet connection
+- Ensure dataset name matches exactly
+- Try generating new API credentials
+
+**"Initialization failed"**
+- Check error details in expander
+- Ensure BIDS dataset has `dataset_description.json`
+- Verify at least one subject directory exists (`sub-*`)
+
+### Performance Issues
+
+**Slow loading**
+- Large datasets (>1000 subjects) may take time to index
+- Consider using a faster disk (SSD)
+- Close other applications
+
+**Download fails**
+- Check internet connection
+- Verify Pennsieve credentials are still valid
+- Ensure sufficient disk space
+- Try downloading individual files
+
+### Common Errors
+
+**"Package ID not found"**
+- Stub files may not contain valid package IDs
+- Try re-downloading dataset from Pennsieve
+- Check file is actually a Pennsieve stub
+
+**"Database locked"**
+- Close and restart the application
+- Ensure only one instance is running
+- Check file permissions on `data/` directory
+
 ## Roadmap
 
-See `MISSING_FEATURES.md` for planned features and enhancements.
+### Version 1.1 (Polish)
+- [ ] Advanced filtering
+- [ ] Sortable tables
+- [ ] Keyboard shortcuts
+- [ ] Improved error messages
+- [ ] Loading animations
+
+### Version 1.5 (Generalization)
+- [ ] Support for other session naming patterns
+- [ ] Auto-detect cohorts
+- [ ] Custom metadata fields
+- [ ] Multiple BIDS datasets
+
+### Version 2.0 (Advanced)
+- [ ] Data visualization (brain images)
+- [ ] MRIQC integration
+- [ ] fMRIPrep integration
+- [ ] Multi-user support
+- [ ] Docker deployment
+
+See `MISSING_FEATURES.md` for complete roadmap.
 
 ---
 
