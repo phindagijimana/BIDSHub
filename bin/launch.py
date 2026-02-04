@@ -44,6 +44,11 @@ def find_available_port(start_port: int = DEFAULT_PORT) -> int:
 
 def main():
     """Main launcher function."""
+    # Change to project root directory (parent of bin/)
+    import os
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(project_root)
+    
     print("=" * 60)
     print("           Data Explorer Launch Script")
     print("=" * 60)

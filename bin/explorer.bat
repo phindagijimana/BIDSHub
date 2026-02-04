@@ -1,6 +1,9 @@
 @echo off
 REM Data Explorer CLI for Windows
-REM Usage: explorer.bat <command> [options]
+REM Usage: bin\explorer.bat <command> [options]
+
+REM Change to project root directory (parent of bin\)
+cd /d "%~dp0\.."
 
 setlocal enabledelayedexpansion
 

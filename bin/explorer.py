@@ -638,6 +638,10 @@ def cmd_help():
 # Main
 def main():
     """Main entry point."""
+    # Change to project root directory (parent of bin/)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(project_root)
+    
     if len(sys.argv) < 2:
         cmd_help()
         sys.exit(0)

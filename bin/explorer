@@ -1,10 +1,13 @@
 #!/bin/bash
 #
 # Data Explorer CLI - Unified command-line interface
-# Usage: ./explorer <command> [options]
+# Usage: bin/explorer <command> [options]
 #
 
 set -e
+
+# Change to project root directory (parent of bin/)
+cd "$(dirname "$0")/.."
 
 # Colors
 RED='\033[0;31m'

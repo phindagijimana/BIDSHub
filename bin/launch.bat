@@ -2,6 +2,9 @@
 REM Data Explorer Launch Script for Windows
 REM Automatically finds available port between 8500-8550
 
+REM Change to project root directory (parent of bin\)
+cd /d "%~dp0\.."
+
 setlocal enabledelayedexpansion
 
 REM Port range

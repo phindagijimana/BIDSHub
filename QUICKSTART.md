@@ -10,7 +10,7 @@ git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
 
 # One-command installation (works on all platforms!)
-python explorer.py install
+python bin/explorer.py install
 ```
 
 **That's it!** The CLI will:
@@ -24,7 +24,7 @@ python explorer.py install
 ## 🎯 Launch Application
 
 ```bash
-python explorer.py start
+python bin/explorer.py start
 ```
 
 **✅ Works on macOS, Linux, and Windows!**
@@ -58,7 +58,7 @@ python explorer.py start
 
 ### Check Status
 ```bash
-python explorer.py status
+./explorer status
 ```
 **Shows:**
 - Running status (yes/no)
@@ -69,7 +69,7 @@ python explorer.py status
 
 ### View Logs
 ```bash
-python explorer.py logs
+./explorer logs
 ```
 **Shows:**
 - Live application logs
@@ -77,12 +77,12 @@ python explorer.py logs
 
 ### Stop Application
 ```bash
-python explorer.py stop
+./explorer stop
 ```
 
 ### Restart Application
 ```bash
-python explorer.py restart
+./explorer restart
 ```
 
 ---
@@ -91,7 +91,7 @@ python explorer.py restart
 
 ### Update to Latest Version
 ```bash
-python explorer.py update
+./explorer update
 ```
 **Does:**
 - Pull latest code from GitHub
@@ -100,7 +100,7 @@ python explorer.py update
 
 ### Run Tests
 ```bash
-python explorer.py test
+./explorer test
 ```
 **Tests:**
 - Database functionality
@@ -109,7 +109,7 @@ python explorer.py test
 
 ### View Configuration
 ```bash
-python explorer.py config
+./explorer config
 ```
 **Shows:**
 - Current .env settings
@@ -118,8 +118,8 @@ python explorer.py config
 
 ### Clean Install
 ```bash
-python explorer.py clean
-python explorer.py install
+./explorer clean
+./explorer install
 ```
 **Removes:**
 - Virtual environment
@@ -134,32 +134,32 @@ python explorer.py install
 ```bash
 git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
-python explorer.py install
-python explorer.py start
+./explorer install
+./explorer start
 # Configure in browser, then use normally
 ```
 
 ### Daily Use
 ```bash
 cd data-explorer
-python explorer.py start
+./explorer start
 # Work in browser
-python explorer.py stop
+./explorer stop
 ```
 
 ### After Git Pull
 ```bash
 git pull
-python explorer.py update
-python explorer.py restart
+./explorer update
+./explorer restart
 ```
 
 ### Troubleshooting
 ```bash
-python explorer.py status    # Check what's running
-python explorer.py logs      # See error messages
-python explorer.py restart   # Try restarting
-python explorer.py test      # Verify installation
+./explorer status    # Check what's running
+./explorer logs      # See error messages
+./explorer restart   # Try restarting
+./explorer test      # Verify installation
 ```
 
 ---
@@ -168,7 +168,7 @@ python explorer.py test      # Verify installation
 
 ### Show All Commands
 ```bash
-python explorer.py help
+./explorer help
 ```
 
 ### Command-Specific Help
@@ -208,23 +208,23 @@ Once running, navigate through the sidebar:
    - CLI automatically finds next available port (8500-8550)
    
 2. **Multiple Datasets?**
-   - Stop current: `python explorer.py stop`
+   - Stop current: `./explorer stop`
    - Update .env with new paths
-   - Restart: `python explorer.py start`
+   - Restart: `./explorer start`
 
 3. **Check Before Starting**
    ```bash
-   python explorer.py status  # See if already running
+   ./explorer status  # See if already running
    ```
 
 4. **Keep Logs Open While Working**
    ```bash
-   python explorer.py logs    # In separate terminal
+   ./explorer logs    # In separate terminal
    ```
 
 5. **Quick Restart After Code Changes**
    ```bash
-   python explorer.py restart
+   ./explorer restart
    ```
 
 ---
@@ -247,8 +247,8 @@ data-explorer/
 ## 🚫 Uninstall
 
 ```bash
-python explorer.py stop
-python explorer.py clean
+./explorer stop
+./explorer clean
 cd ..
 rm -rf data-explorer
 ```
@@ -258,7 +258,7 @@ rm -rf data-explorer
 ## 🎉 You're Ready!
 
 ```bash
-python explorer.py start
+./explorer start
 ```
 
 Open browser → Configure → Explore your data!

@@ -23,10 +23,10 @@ git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
 
 # Install (one command)
-python explorer.py install
+python bin/explorer.py install
 
 # Launch
-python explorer.py start
+python bin/explorer.py start
 ```
 
 The browser opens automatically at `http://localhost:8501` (or next available port).
@@ -43,7 +43,7 @@ The browser opens automatically at `http://localhost:8501` (or next available po
 ## CLI Commands
 
 ```bash
-python explorer.py <command>
+python bin/explorer.py <command>
 ```
 
 **Works on macOS, Linux, and Windows.**
@@ -79,7 +79,11 @@ Or configure via UI on first launch.
 ```
 data-explorer/
 ├── app.py                    # Main application
-├── explorer.py               # CLI interface
+├── bin/                      # CLI tools
+│   ├── explorer.py          # Cross-platform CLI (recommended)
+│   ├── explorer             # Unix CLI
+│   ├── explorer.bat         # Windows CLI
+│   └── launch.*             # Alternative launchers
 ├── src/
 │   ├── bids_loader.py       # BIDS integration
 │   ├── pennsieve_client.py  # Cloud API client
@@ -88,9 +92,10 @@ data-explorer/
 │   ├── qc_manager.py        # Quality control
 │   ├── theme.py             # UI styling
 │   └── utils.py             # Helpers
-├── scripts/init_db.py       # Database setup
-├── data/                    # Local storage
-└── tests/                   # Tests
+├── scripts/                  # Internal utilities
+│   └── init_db.py           # Database setup
+├── data/                     # Local storage
+└── tests/                    # Tests
 ```
 
 ## Troubleshooting
@@ -105,15 +110,15 @@ data-explorer/
 
 **Database issues?**
 ```bash
-python explorer.py clean
-python explorer.py install
+python bin/explorer.py clean
+python bin/explorer.py install
 ```
 
 **More help:**
 ```bash
-python explorer.py help
-python explorer.py status
-python explorer.py logs
+python bin/explorer.py help
+python bin/explorer.py status
+python bin/explorer.py logs
 ```
 
 ## Documentation

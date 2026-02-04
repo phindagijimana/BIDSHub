@@ -6,6 +6,9 @@
 
 set -e
 
+# Change to project root directory (parent of bin/)
+cd "$(dirname "$0")/.."
+
 # Color output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
