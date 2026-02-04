@@ -466,7 +466,204 @@ def page_downloads():
     st.markdown('<h1 class="main-header">Download Manager</h1>', 
                 unsafe_allow_html=True)
     
-    st.info("Download manager coming in Phase 3...")
+    if not st.session_state.db or not st.session_state.ps_client:
+        st.warning("Please complete setup first")
+        return
+    
+    # Initialize download manager in session state
+    if 'download_manager' not in st.session_state:
+        from src.download_manager import DownloadManager
+        st.session_state.download_manager = DownloadManager(
+            ps_client=st.session_state.ps_client,
+            database=st.session_state.db,
+            max_concurrent=3
+        )
+    
+    dm = st.session_state.download_manager
+    
+    # Storage Estimation
+    st.markdown('<h2 class="section-header">Storage Estimation</h2>', 
+                unsafe_allow_html=True)
+    
+    from src.download_manager import check_available_space
+    from src.utils import format_file_size
+    
+    queued_size = dm.get_total_queue_size()
+    queued_count = dm.get_queued_count()
+    
+    try:
+        available_space = check_available_space('.')
+    except:
+        available_space = 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Queued Items", queued_count)
+    
+    with col2:
+        st.metric("Total Size", format_file_size(queued_size))
+    
+    with col3:
+        st.metric("Available Space", format_file_size(available_space))
+    
+    with col4:
+        if available_space > 0 and queued_size > 0:
+            if available_space >= queued_size:
+                st.metric("Status", "✓ Sufficient", delta="Ready")
+            else:
+                st.metric("Status", "⚠ Insufficient", delta="Warning", delta_color="inverse")
+        else:
+            st.metric("Status", "—")
+    
+    st.markdown("---")
+    
+    # Quick Select
+    st.markdown('<h2 class="section-header">Quick Select</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("Select All Subjects", use_container_width=True):
+            st.info("Quick select coming soon - use subject browser to add downloads")
+    
+    with col2:
+        if st.button("Select Complete Only", use_container_width=True):
+            st.info("Quick select coming soon - use subject browser to add downloads")
+    
+    with col3:
+        session_select = st.selectbox(
+            "Filter by Session",
+            options=['All', '2WK', '6MO'],
+            key="download_session_filter"
+        )
+    
+    st.markdown("---")
+    
+    # Download Queue
+    st.markdown('<h2 class="section-header">Download Queue</h2>', 
+                unsafe_allow_html=True)
+    
+    # Get queue items
+    queue_items = dm.get_queue_items()
+    
+    if not queue_items:
+        st.info("No items in download queue. Add files from the subject browser.")
+    else:
+        # Create queue table
+        queue_data = []
+        for item in queue_items:
+            queue_data.append({
+                'ID': item['id'],
+                'File': Path(item['file_path']).name,
+                'Subject': item['subject_id'],
+                'Size': format_file_size(item.get('file_size_bytes', 0)),
+                'Status': item['status'].title(),
+                'Added': item.get('added_date', 'Unknown')
+            })
+        
+        df_queue = pd.DataFrame(queue_data)
+        
+        # Display table
+        st.dataframe(
+            df_queue,
+            use_container_width=True,
+            hide_index=True,
+            height=300
+        )
+        
+        # Get download stats
+        stats = dm.get_download_stats()
+        
+        # Progress bar
+        if stats['total'] > 0:
+            progress = stats['completed'] / stats['total']
+            st.progress(progress)
+            st.caption(f"Progress: {stats['completed']}/{stats['total']} files ({stats['progress_pct']:.1f}%)")
+        
+        st.markdown("---")
+        
+        # Control buttons
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if st.button("Start Downloads", 
+                        type="primary",
+                        use_container_width=True,
+                        disabled=stats['queued'] == 0):
+                success = dm.start_downloads()
+                if success:
+                    st.success("✓ Downloads started!")
+                    st.rerun()
+                else:
+                    st.error("No items to download")
+        
+        with col2:
+            if st.button("Pause All",
+                        use_container_width=True,
+                        disabled=stats['downloading'] == 0):
+                dm.pause_downloads()
+                st.info("Downloads paused")
+                st.rerun()
+        
+        with col3:
+            if st.button("Resume",
+                        use_container_width=True,
+                        disabled=stats['paused'] == 0):
+                dm.resume_downloads()
+                st.success("Downloads resumed")
+                st.rerun()
+        
+        with col4:
+            if st.button("Clear Queue",
+                        use_container_width=True):
+                cleared = dm.clear_queue('queued')
+                st.success(f"✓ Cleared {cleared} items")
+                st.rerun()
+        
+        # Download Statistics
+        st.markdown("---")
+        st.markdown('<h2 class="section-header">Statistics</h2>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Completed", stats['completed'])
+        
+        with col2:
+            st.metric("Failed", stats['failed'])
+        
+        with col3:
+            st.metric("Downloading", stats['downloading'])
+        
+        with col4:
+            st.metric("Remaining", stats['queued'])
+    
+    # Settings
+    st.markdown("---")
+    st.markdown('<h2 class="section-header">Settings</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        max_concurrent = st.selectbox(
+            "Max Concurrent Downloads",
+            options=[1, 2, 3, 4, 5],
+            index=2,
+            key="max_concurrent_downloads"
+        )
+        st.caption("Number of simultaneous downloads")
+    
+    with col2:
+        download_dir = st.text_input(
+            "Download Directory",
+            value=st.session_state.bids_root or "",
+            key="download_directory"
+        )
+        st.caption("Local destination for downloads")
 
 
 def page_qc():
@@ -589,8 +786,62 @@ def page_subject_detail():
             df_2wk = pd.DataFrame(scan_data)
             st.dataframe(df_2wk, use_container_width=True, hide_index=True)
             
-            if st.button("Download All 2WK", key="dl_2wk"):
-                st.info("Download functionality coming in Phase 3")
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.button("Add All to Queue", key="dl_2wk"):
+                    # Initialize download manager if needed
+                    if 'download_manager' not in st.session_state:
+                        from src.download_manager import DownloadManager
+                        st.session_state.download_manager = DownloadManager(
+                            ps_client=st.session_state.ps_client,
+                            database=st.session_state.db,
+                            max_concurrent=3
+                        )
+                    
+                    # Add each scan to queue
+                    added = 0
+                    for scan in scans_2wk:
+                        # Get package ID (from stub file or metadata)
+                        package_id = None
+                        if st.session_state.bids_loader.is_stub_file(scan['file_path']):
+                            from src.utils import parse_pennsieve_stub
+                            package_id = parse_pennsieve_stub(scan['file_path'])
+                        
+                        if package_id:
+                            # Get scan from database to get scan_id
+                            db_scans = st.session_state.db.get_subject_scans(subject_id, '2WK')
+                            scan_id = None
+                            for db_scan in db_scans:
+                                if db_scan['file_path'] == scan['file_path']:
+                                    scan_id = db_scan['id']
+                                    break
+                            
+                            # If scan not in DB, add it
+                            if not scan_id:
+                                scan_id = st.session_state.db.add_scan(
+                                    subject_id=subject_id,
+                                    session='2WK',
+                                    modality=scan.get('modality', ''),
+                                    file_path=scan['file_path'],
+                                    suffix=scan.get('suffix', ''),
+                                    pennsieve_package_id=package_id
+                                )
+                            
+                            if scan_id:
+                                success = st.session_state.download_manager.add_to_queue(
+                                    scan_id=scan_id,
+                                    subject_id=subject_id,
+                                    file_path=scan['file_path'],
+                                    package_id=package_id,
+                                    file_size=st.session_state.bids_loader.get_file_size(scan['file_path'])
+                                )
+                                if success:
+                                    added += 1
+                    
+                    if added > 0:
+                        st.success(f"✓ Added {added} scans to download queue")
+                    else:
+                        st.warning("No scans added to queue")
         else:
             st.info("No scans found for session 2WK")
     
@@ -626,8 +877,62 @@ def page_subject_detail():
             df_6mo = pd.DataFrame(scan_data)
             st.dataframe(df_6mo, use_container_width=True, hide_index=True)
             
-            if st.button("Download All 6MO", key="dl_6mo"):
-                st.info("Download functionality coming in Phase 3")
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.button("Add All to Queue", key="dl_6mo"):
+                    # Initialize download manager if needed
+                    if 'download_manager' not in st.session_state:
+                        from src.download_manager import DownloadManager
+                        st.session_state.download_manager = DownloadManager(
+                            ps_client=st.session_state.ps_client,
+                            database=st.session_state.db,
+                            max_concurrent=3
+                        )
+                    
+                    # Add each scan to queue
+                    added = 0
+                    for scan in scans_6mo:
+                        # Get package ID (from stub file or metadata)
+                        package_id = None
+                        if st.session_state.bids_loader.is_stub_file(scan['file_path']):
+                            from src.utils import parse_pennsieve_stub
+                            package_id = parse_pennsieve_stub(scan['file_path'])
+                        
+                        if package_id:
+                            # Get scan from database to get scan_id
+                            db_scans = st.session_state.db.get_subject_scans(subject_id, '6MO')
+                            scan_id = None
+                            for db_scan in db_scans:
+                                if db_scan['file_path'] == scan['file_path']:
+                                    scan_id = db_scan['id']
+                                    break
+                            
+                            # If scan not in DB, add it
+                            if not scan_id:
+                                scan_id = st.session_state.db.add_scan(
+                                    subject_id=subject_id,
+                                    session='6MO',
+                                    modality=scan.get('modality', ''),
+                                    file_path=scan['file_path'],
+                                    suffix=scan.get('suffix', ''),
+                                    pennsieve_package_id=package_id
+                                )
+                            
+                            if scan_id:
+                                success = st.session_state.download_manager.add_to_queue(
+                                    scan_id=scan_id,
+                                    subject_id=subject_id,
+                                    file_path=scan['file_path'],
+                                    package_id=package_id,
+                                    file_size=st.session_state.bids_loader.get_file_size(scan['file_path'])
+                                )
+                                if success:
+                                    added += 1
+                    
+                    if added > 0:
+                        st.success(f"✓ Added {added} scans to download queue")
+                    else:
+                        st.warning("No scans added to queue")
         else:
             st.info("No scans found for session 6MO")
 
