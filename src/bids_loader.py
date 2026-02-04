@@ -31,10 +31,15 @@ class BIDSLoader:
         print(f"Loading BIDS dataset from: {bids_root}")
         print("This may take a moment...")
         
+        # For Pennsieve stub datasets, we need to be lenient with JSON files
+        # Stub files may not be valid JSON
         self.layout = BIDSLayout(
             str(self.bids_root),
             validate=validate,
-            derivatives=False  # Don't index derivatives for MVP
+            derivatives=False,  # Don't index derivatives for MVP
+            ignore=['code/', 'stimuli/', 'sourcedata/', 'derivatives/'],
+            # Skip indexing metadata from JSON files (they're stub files)
+            index_metadata=False
         )
         
         print(f"✓ Loaded {len(self.get_subjects())} subjects")
