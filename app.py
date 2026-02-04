@@ -87,25 +87,25 @@ def render_sidebar():
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
             
-            if st.button("📋 Subjects", use_container_width=True):
+            if st.button("Subjects", use_container_width=True):
                 st.session_state.current_page = 'subjects'
                 st.rerun()
             
-            if st.button("⬇️ Download Manager", use_container_width=True):
+            if st.button("Download Manager", use_container_width=True):
                 st.session_state.current_page = 'downloads'
                 st.rerun()
             
-            if st.button("✅ QC Dashboard", use_container_width=True):
+            if st.button("QC Dashboard", use_container_width=True):
                 st.session_state.current_page = 'qc'
                 st.rerun()
             
-            if st.button("📤 Export", use_container_width=True):
+            if st.button("Export", use_container_width=True):
                 st.session_state.current_page = 'export'
                 st.rerun()
             
             st.markdown("---")
             
-            if st.button("⚙️ Settings", use_container_width=True):
+            if st.button("Settings", use_container_width=True):
                 st.session_state.current_page = 'setup'
                 st.rerun()
         
@@ -140,7 +140,7 @@ def page_setup():
     if bids_root and not Path(bids_root).exists():
         st.error(f"Directory not found: {bids_root}")
     elif bids_root and Path(bids_root).exists():
-        st.success(f"✓ Directory found")
+        st.success(f"Directory found")
     
     st.markdown('<h2 class="section-header">Pennsieve Configuration</h2>', 
                 unsafe_allow_html=True)
@@ -252,7 +252,7 @@ def page_setup():
                     )
                 
                 progress_bar.progress(100)
-                status_text.text("✓ Initialization complete!")
+                status_text.text("Initialization complete!")
                 
                 # Save to session state
                 st.session_state.bids_root = bids_root
@@ -263,7 +263,7 @@ def page_setup():
                 st.session_state.setup_complete = True
                 st.session_state.current_page = 'dashboard'
                 
-                st.success(f"✓ Successfully initialized dataset with {len(subjects)} subjects!")
+                st.success(f"Successfully initialized dataset with {len(subjects)} subjects!")
                 st.balloons()
                 
                 # Auto-navigate to dashboard
@@ -510,9 +510,9 @@ def page_downloads():
     with col4:
         if available_space > 0 and queued_size > 0:
             if available_space >= queued_size:
-                st.metric("Status", "✓ Sufficient", delta="Ready")
+                st.metric("Status", "Sufficient", delta="Ready")
             else:
-                st.metric("Status", "⚠ Insufficient", delta="Warning", delta_color="inverse")
+                st.metric("Status", "Insufficient", delta="Warning", delta_color="inverse")
         else:
             st.metric("Status", "—")
     
@@ -594,7 +594,7 @@ def page_downloads():
                         disabled=stats['queued'] == 0):
                 success = dm.start_downloads()
                 if success:
-                    st.success("✓ Downloads started!")
+                    st.success("Downloads started!")
                     st.rerun()
                 else:
                     st.error("No items to download")
@@ -619,7 +619,7 @@ def page_downloads():
             if st.button("Clear Queue",
                         use_container_width=True):
                 cleared = dm.clear_queue('queued')
-                st.success(f"✓ Cleared {cleared} items")
+                st.success(f"Cleared {cleared} items")
                 st.rerun()
         
         # Download Statistics
@@ -804,7 +804,7 @@ def page_qc():
                     qc_status=bulk_status,
                     reviewed_by="bulk_update"
                 )
-                st.success(f"✓ Updated {count} subjects to {bulk_status}")
+                st.success(f"Updated {count} subjects to {bulk_status}")
                 st.rerun()
         
         with col3:
@@ -944,7 +944,7 @@ def page_subject_detail():
                 flagged=flagged
             )
             if success:
-                st.success("✓ QC status updated")
+                st.success("QC status updated")
                 st.rerun()
             else:
                 st.error("Failed to update QC status")
@@ -1047,7 +1047,7 @@ def page_subject_detail():
                                     added += 1
                     
                     if added > 0:
-                        st.success(f"✓ Added {added} scans to download queue")
+                        st.success(f"Added {added} scans to download queue")
                     else:
                         st.warning("No scans added to queue")
         else:
@@ -1138,7 +1138,7 @@ def page_subject_detail():
                                     added += 1
                     
                     if added > 0:
-                        st.success(f"✓ Added {added} scans to download queue")
+                        st.success(f"Added {added} scans to download queue")
                     else:
                         st.warning("No scans added to queue")
         else:

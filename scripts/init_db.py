@@ -172,17 +172,17 @@ def init_database(db_path='data/tracktbi.db'):
         """)
         
         conn.commit()
-        print(f"✓ Database initialized successfully at: {db_path}")
-        print(f"✓ Created tables: subjects, scans, download_queue, qc_history, metadata")
+        print(f"[OK] Database initialized successfully at: {db_path}")
+        print(f"[OK] Created tables: subjects, scans, download_queue, qc_history, metadata")
         
         # Get index count
         index_count = cursor.execute('SELECT COUNT(*) FROM sqlite_master WHERE type="index"').fetchone()[0]
-        print(f"✓ Created {index_count} indexes")
+        print(f"[OK] Created {index_count} indexes")
         
         return True
         
     except sqlite3.Error as e:
-        print(f"✗ Database initialization failed: {e}")
+        print(f"[ERROR] Database initialization failed: {e}")
         return False
         
     finally:
@@ -211,21 +211,21 @@ def verify_database(db_path='data/tracktbi.db'):
         
         for table in required_tables:
             if table not in existing_tables:
-                print(f"✗ Missing table: {table}")
+                print(f"[ERROR] Missing table: {table}")
                 return False
         
-        print(f"✓ All {len(required_tables)} tables present")
+        print(f"[OK] All {len(required_tables)} tables present")
         
         # Check metadata
         cursor.execute("SELECT key, value FROM metadata")
         metadata = dict(cursor.fetchall())
-        print(f"✓ Database version: {metadata.get('db_version', 'unknown')}")
-        print(f"✓ Created at: {metadata.get('created_at', 'unknown')}")
+        print(f"[OK] Database version: {metadata.get('db_version', 'unknown')}")
+        print(f"[OK] Created at: {metadata.get('created_at', 'unknown')}")
         
         return True
         
     except sqlite3.Error as e:
-        print(f"✗ Database verification failed: {e}")
+        print(f"[ERROR] Database verification failed: {e}")
         return False
         
     finally:
@@ -246,14 +246,14 @@ if __name__ == "__main__":
             print("Aborted.")
             exit(0)
         os.remove(db_path)
-        print(f"✓ Removed existing database")
+        print(f"[OK] Removed existing database")
     
     success = init_database(db_path)
     
     if success:
         print("\nVerifying database...")
         verify_database(db_path)
-        print("\n✓ Database ready for use!")
+        print("\n[OK] Database ready for use!")
     else:
-        print("\n✗ Database initialization failed!")
+        print("\n[ERROR] Database initialization failed!")
         exit(1)

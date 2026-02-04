@@ -396,7 +396,7 @@ if __name__ == "__main__":
     for status in test_statuses:
         qm = QCManager(None)  # No database for testing
         is_valid = qm.validate_qc_status(status)
-        print(f"  '{status}': {'✓ Valid' if is_valid else '✗ Invalid'}")
+        print(f"  '{status}': {'[OK] Valid' if is_valid else '[ERROR] Invalid'}")
     
     # Test metrics calculation
     print("\nMetrics Calculation:")

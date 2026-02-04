@@ -57,34 +57,30 @@ def print_header(text):
 
 def print_success(text):
     """Print success message."""
-    symbol = "✓" if Colors.supports_color() else "[OK]"
     color = Colors.GREEN if Colors.supports_color() else ""
     nc = Colors.NC if Colors.supports_color() else ""
-    print(f"{color}{symbol}{nc} {text}")
+    print(f"{color}[OK]{nc} {text}")
 
 
 def print_error(text):
     """Print error message."""
-    symbol = "✗" if Colors.supports_color() else "[ERROR]"
     color = Colors.RED if Colors.supports_color() else ""
     nc = Colors.NC if Colors.supports_color() else ""
-    print(f"{color}{symbol}{nc} {text}")
+    print(f"{color}[ERROR]{nc} {text}")
 
 
 def print_warning(text):
     """Print warning message."""
-    symbol = "⚠" if Colors.supports_color() else "[WARN]"
     color = Colors.YELLOW if Colors.supports_color() else ""
     nc = Colors.NC if Colors.supports_color() else ""
-    print(f"{color}{symbol}{nc} {text}")
+    print(f"{color}[WARN]{nc} {text}")
 
 
 def print_info(text):
     """Print info message."""
-    symbol = "ℹ" if Colors.supports_color() else "[INFO]"
     color = Colors.CYAN if Colors.supports_color() else ""
     nc = Colors.NC if Colors.supports_color() else ""
-    print(f"{color}{symbol}{nc} {text}")
+    print(f"{color}[INFO]{nc} {text}")
 
 
 def get_python_executable():

@@ -60,14 +60,14 @@ echo ""
 
 # Check if virtual environment is activated
 if [[ -z "$VIRTUAL_ENV" ]]; then
-    echo -e "${YELLOW}⚠  Virtual environment not activated${NC}"
+    echo -e "${YELLOW}[WARN] Virtual environment not activated${NC}"
     echo -e "Attempting to activate venv..."
     
     if [[ -d "venv" ]]; then
         source venv/bin/activate
-        echo -e "${GREEN}✓ Virtual environment activated${NC}"
+        echo -e "${GREEN}[OK] Virtual environment activated${NC}"
     else
-        echo -e "${RED}✗ Virtual environment not found${NC}"
+        echo -e "${RED}[ERROR] Virtual environment not found${NC}"
         echo -e "${YELLOW}Run: python -m venv venv && source venv/bin/activate${NC}"
         exit 1
     fi
@@ -75,7 +75,7 @@ fi
 
 # Check if streamlit is installed
 if ! command -v streamlit &> /dev/null; then
-    echo -e "${RED}✗ Streamlit not installed${NC}"
+    echo -e "${RED}[ERROR] Streamlit not installed${NC}"
     echo -e "${YELLOW}Run: pip install -r requirements.txt${NC}"
     exit 1
 fi
@@ -85,17 +85,17 @@ echo -e "Searching for available port in range ${MIN_PORT}-${MAX_PORT}..."
 PORT=$(find_available_port)
 
 if [[ -z "$PORT" ]]; then
-    echo -e "${RED}✗ No available ports in range ${MIN_PORT}-${MAX_PORT}${NC}"
+    echo -e "${RED}[ERROR] No available ports in range ${MIN_PORT}-${MAX_PORT}${NC}"
     echo -e "${YELLOW}Please close some applications and try again${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Found available port: ${PORT}${NC}"
+echo -e "${GREEN}[OK] Found available port: ${PORT}${NC}"
 echo ""
 
 # Launch Streamlit
 echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
-echo -e "${GREEN}🚀 Launching Data Explorer on port ${PORT}...${NC}"
+echo -e "${GREEN}Launching Data Explorer on port ${PORT}...${NC}"
 echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
 echo ""
 echo -e "  Local URL:   ${GREEN}http://localhost:${PORT}${NC}"

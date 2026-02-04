@@ -34,11 +34,11 @@ class PennsieveClient:
             try:
                 user_email = getattr(getattr(self.ps, 'context', None), 'user', None)
                 if user_email:
-                    print(f"✓ Connected to Pennsieve as: {user_email.email}")
+                    print(f"[OK] Connected to Pennsieve as: {user_email.email}")
                 else:
-                    print("✓ Connected to Pennsieve")
+                    print("[OK] Connected to Pennsieve")
             except:
-                print("✓ Connected to Pennsieve")
+                print("[OK] Connected to Pennsieve")
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Pennsieve: {e}")
         
@@ -58,12 +58,12 @@ class PennsieveClient:
         """
         try:
             self.dataset = self.ps.get_dataset(dataset_name)
-            print(f"✓ Connected to dataset: {self.dataset.name}")
+            print(f"[OK] Connected to dataset: {self.dataset.name}")
             print(f"  ID: {self.dataset.id}")
             print(f"  Storage: {self.format_size(self.dataset.storage)}")
             return True
         except Exception as e:
-            print(f"✗ Failed to connect to dataset '{dataset_name}': {e}")
+            print(f"[ERROR] Failed to connect to dataset '{dataset_name}': {e}")
             return False
     
     def list_datasets(self) -> List[str]:
@@ -211,10 +211,10 @@ class PennsieveClient:
             # Verify download
             if os.path.exists(destination):
                 size = os.path.getsize(destination)
-                print(f"✓ Downloaded {self.format_size(size)}")
+                print(f"[OK] Downloaded {self.format_size(size)}")
                 return True
             else:
-                print("✗ Download failed: File not created")
+                print("[ERROR] Download failed: File not created")
                 return False
                 
         except Exception as e:
@@ -356,9 +356,9 @@ if __name__ == "__main__":
                 
                 # Verify connection
                 if client.verify_connection():
-                    print("\n✓ Connection verified")
+                    print("\n[OK] Connection verified")
                 else:
-                    print("\n✗ Connection verification failed")
+                    print("\n[ERROR] Connection verification failed")
         
     except Exception as e:
         print(f"Error: {e}")

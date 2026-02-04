@@ -275,7 +275,7 @@ def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
             'QC Status': subject.get('qc_status', 'pending').title(),
             'Sessions': get_session_labels(subject),
             'Scans': f"{subject.get('scan_count_2wk', 0) + subject.get('scan_count_6mo', 0)}",
-            'Flagged': '⚠️' if subject.get('flagged') else ''
+            'Flagged': 'Yes' if subject.get('flagged') else ''
         })
     
     return pd.DataFrame(df_data)

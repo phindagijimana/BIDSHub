@@ -57,9 +57,9 @@ def main():
     # Check if streamlit is available
     try:
         import streamlit
-        print(f"✓ Streamlit {streamlit.__version__} found")
+        print(f"[OK] Streamlit {streamlit.__version__} found")
     except ImportError:
-        print("✗ Streamlit not installed")
+        print("[ERROR] Streamlit not installed")
         print("  Run: pip install -r requirements.txt")
         sys.exit(1)
     
@@ -68,16 +68,16 @@ def main():
     port = find_available_port()
     
     if port is None:
-        print(f"\n✗ No available ports in range {MIN_PORT}-{MAX_PORT}")
+        print(f"\n[ERROR] No available ports in range {MIN_PORT}-{MAX_PORT}")
         print("  Please close some applications and try again")
         sys.exit(1)
     
-    print(f"✓ Found available port: {port}")
+    print(f"[OK] Found available port: {port}")
     print()
     
     # Launch Streamlit
     print("-" * 60)
-    print(f"🚀 Launching Data Explorer on port {port}...")
+    print(f"Launching Data Explorer on port {port}...")
     print("-" * 60)
     print()
     print(f"  Local URL:   http://localhost:{port}")
@@ -104,7 +104,7 @@ def main():
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print("\n\n✓ Data Explorer stopped")
+        print("\n\n[OK] Data Explorer stopped")
         print("Thank you for using Data Explorer!")
 
 
