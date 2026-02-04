@@ -86,35 +86,19 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
         'setup': 'Settings'
     }
     
-    # Build breadcrumb trail
-    breadcrumb_html = '<div style="margin-bottom: 10px; padding: 8px 0; font-size: 14px; color: #666;">'
-    breadcrumb_items = []
-    
-    # Always start with Dashboard
-    breadcrumb_items.append('<a href="#" onclick="return false;" style="color: #0068c9; text-decoration: none; cursor: pointer;">Home</a>')
+    # Build breadcrumb trail as text only (clean, minimal)
+    breadcrumb_parts = ['Home']
     
     # Add parent page if exists
     if parent_page and parent_page != 'dashboard':
-        breadcrumb_items.append(f'<span style="color: #0068c9;">{page_names.get(parent_page, parent_page)}</span>')
+        breadcrumb_parts.append(page_names.get(parent_page, parent_page))
     
     # Add current page
-    breadcrumb_items.append(f'<span style="color: #262730; font-weight: 500;">{page_names.get(current_page, current_page)}</span>')
+    breadcrumb_parts.append(page_names.get(current_page, current_page))
     
-    # Join with separator
-    breadcrumb_html += ' / '.join(breadcrumb_items)
-    breadcrumb_html += '</div>'
-    
-    # Display as simple text breadcrumb
-    st.markdown(breadcrumb_html, unsafe_allow_html=True)
-    
-    # Add functional back button for navigation
-    if len(breadcrumb_items) > 2 or (len(breadcrumb_items) == 2 and current_page != 'dashboard'):
-        col1, col2 = st.columns([1, 11])
-        with col1:
-            target = parent_page if parent_page else 'dashboard'
-            if st.button("← Back", key=f"back_to_{target}"):
-                st.session_state.current_page = target
-                st.rerun()
+    # Display breadcrumb
+    breadcrumb_text = ' / '.join(breadcrumb_parts)
+    st.caption(breadcrumb_text)
 
 
 def render_sidebar():
