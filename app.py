@@ -69,6 +69,42 @@ def init_session_state():
         st.session_state.search_query = ''
 
 
+def render_breadcrumb(current_page: str, parent_page: str = None):
+    """Render breadcrumb navigation at top of page."""
+    breadcrumb_html = '<div style="margin-bottom: 20px; color: #666;">'
+    
+    # Always start with Home/Dashboard
+    if current_page == 'dashboard':
+        breadcrumb_html += '<span style="color: #002d72; font-weight: bold;">Dashboard</span>'
+    else:
+        breadcrumb_html += '<a href="#" style="color: #002d72; text-decoration: none;">Dashboard</a> > '
+        
+        # Add parent if exists
+        if parent_page:
+            page_names = {
+                'subjects': 'Subjects',
+                'downloads': 'Download Manager',
+                'qc': 'QC Dashboard',
+                'export': 'Export',
+                'setup': 'Settings'
+            }
+            breadcrumb_html += f'{page_names.get(parent_page, parent_page)} > '
+        
+        # Add current page
+        page_names = {
+            'subjects': 'Subjects',
+            'subject_detail': 'Subject Detail',
+            'downloads': 'Download Manager',
+            'qc': 'QC Dashboard',
+            'export': 'Export',
+            'setup': 'Settings'
+        }
+        breadcrumb_html += f'<span style="color: #002d72; font-weight: bold;">{page_names.get(current_page, current_page)}</span>'
+    
+    breadcrumb_html += '</div>'
+    st.markdown(breadcrumb_html, unsafe_allow_html=True)
+
+
 def render_sidebar():
     """Render navigation sidebar."""
     with st.sidebar:
@@ -83,29 +119,50 @@ def render_sidebar():
         if st.session_state.setup_complete:
             st.markdown("### Navigation")
             
-            if st.button("🏠 Dashboard", use_container_width=True):
+            # Get current page for highlighting
+            current = st.session_state.current_page
+            
+            # Dashboard
+            if st.button("Dashboard", 
+                        use_container_width=True,
+                        type="primary" if current == 'dashboard' else "secondary"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
             
-            if st.button("Subjects", use_container_width=True):
+            # Subjects
+            if st.button("Subjects", 
+                        use_container_width=True,
+                        type="primary" if current in ['subjects', 'subject_detail'] else "secondary"):
                 st.session_state.current_page = 'subjects'
                 st.rerun()
             
-            if st.button("Download Manager", use_container_width=True):
+            # Download Manager
+            if st.button("Download Manager", 
+                        use_container_width=True,
+                        type="primary" if current == 'downloads' else "secondary"):
                 st.session_state.current_page = 'downloads'
                 st.rerun()
             
-            if st.button("QC Dashboard", use_container_width=True):
+            # QC Dashboard
+            if st.button("QC Dashboard", 
+                        use_container_width=True,
+                        type="primary" if current == 'qc' else "secondary"):
                 st.session_state.current_page = 'qc'
                 st.rerun()
             
-            if st.button("Export", use_container_width=True):
+            # Export
+            if st.button("Export", 
+                        use_container_width=True,
+                        type="primary" if current == 'export' else "secondary"):
                 st.session_state.current_page = 'export'
                 st.rerun()
             
             st.markdown("---")
             
-            if st.button("Settings", use_container_width=True):
+            # Settings
+            if st.button("Settings", 
+                        use_container_width=True,
+                        type="primary" if current == 'setup' else "secondary"):
                 st.session_state.current_page = 'setup'
                 st.rerun()
         
@@ -118,6 +175,7 @@ def render_sidebar():
 
 def page_setup():
     """Setup page for first-time configuration."""
+    render_breadcrumb('setup')
     st.markdown('<h1 class="main-header">Data Explorer - Setup</h1>', 
                 unsafe_allow_html=True)
     
@@ -278,6 +336,7 @@ def page_setup():
 
 def page_dashboard():
     """Main dashboard page."""
+    render_breadcrumb('dashboard')
     st.markdown('<h1 class="main-header">Data Explorer</h1>', 
                 unsafe_allow_html=True)
     
@@ -360,6 +419,7 @@ def page_dashboard():
 
 def page_subjects():
     """Subject browser page."""
+    render_breadcrumb('subjects')
     st.markdown('<h1 class="main-header">Subjects</h1>', 
                 unsafe_allow_html=True)
     
@@ -463,6 +523,7 @@ def page_subjects():
 
 def page_downloads():
     """Download manager page."""
+    render_breadcrumb('downloads')
     st.markdown('<h1 class="main-header">Download Manager</h1>', 
                 unsafe_allow_html=True)
     
@@ -668,6 +729,7 @@ def page_downloads():
 
 def page_qc():
     """QC dashboard page."""
+    render_breadcrumb('qc')
     st.markdown('<h1 class="main-header">Quality Control Dashboard</h1>', 
                 unsafe_allow_html=True)
     
@@ -892,6 +954,9 @@ def page_subject_detail():
             st.session_state.current_page = 'subjects'
             st.rerun()
         return
+    
+    # Breadcrumb navigation
+    render_breadcrumb('subject_detail', parent_page='subjects')
     
     # Header with back button
     col1, col2 = st.columns([3, 1])
@@ -1147,6 +1212,7 @@ def page_subject_detail():
 
 def page_export():
     """Export page."""
+    render_breadcrumb('export')
     st.markdown('<h1 class="main-header">Export Data</h1>', 
                 unsafe_allow_html=True)
     
