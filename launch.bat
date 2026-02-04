@@ -7,6 +7,7 @@ setlocal enabledelayedexpansion
 REM Port range
 set MIN_PORT=8500
 set MAX_PORT=8550
+set DEFAULT_PORT=8501
 
 echo ============================================================
 echo            Data Explorer Launch Script
@@ -34,14 +35,24 @@ if errorlevel 1 (
 )
 
 REM Find available port
-echo Searching for available port in range %MIN_PORT%-%MAX_PORT%...
+echo Searching for available port (trying %DEFAULT_PORT% first)...
 
+REM Try default port first
 set PORT=
+netstat -an | find "LISTENING" | find ":%DEFAULT_PORT% " >nul
+if errorlevel 1 (
+    set PORT=%DEFAULT_PORT%
+    goto :found_port
+)
+
+REM Try other ports in range
 for /l %%p in (%MIN_PORT%,1,%MAX_PORT%) do (
-    netstat -an | find "LISTENING" | find ":%%p " >nul
-    if errorlevel 1 (
-        set PORT=%%p
-        goto :found_port
+    if not %%p==%DEFAULT_PORT% (
+        netstat -an | find "LISTENING" | find ":%%p " >nul
+        if errorlevel 1 (
+            set PORT=%%p
+            goto :found_port
+        )
     )
 )
 

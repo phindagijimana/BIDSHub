@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 # Port range
 MIN_PORT=8500
 MAX_PORT=8550
+DEFAULT_PORT=8501
 
 # Function to check if port is available
 is_port_available() {
@@ -27,7 +28,19 @@ is_port_available() {
 
 # Function to find available port
 find_available_port() {
+    # Try default port first
+    if is_port_available $DEFAULT_PORT; then
+        echo $DEFAULT_PORT
+        return 0
+    fi
+    
+    # Try other ports in range
     for port in $(seq $MIN_PORT $MAX_PORT); do
+        # Skip default port (already tried)
+        if [ $port -eq $DEFAULT_PORT ]; then
+            continue
+        fi
+        
         if is_port_available $port; then
             echo $port
             return 0
