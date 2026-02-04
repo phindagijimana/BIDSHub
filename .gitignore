@@ -85,3 +85,6 @@ htmlcov/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Internal Documents (not for GitHub)
+ROADMAP.md

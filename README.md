@@ -107,15 +107,6 @@ MIT License - see [LICENSE](LICENSE) file
 - **Documentation**: [QUICKSTART.md](QUICKSTART.md)
 - **Questions**: Open an issue
 
-## Roadmap
-
-Future enhancements planned:
-- Advanced filtering and sorting
-- Data visualization (brain images)
-- MRIQC and fMRIPrep integration
-- Multi-user support
-- Docker deployment
-
 ---
 
 **Version**: 1.0.0 (MVP)  
