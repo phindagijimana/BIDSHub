@@ -124,7 +124,6 @@ python bin/explorer.py logs
 ## Documentation
 
 - [QUICKSTART.md](QUICKSTART.md) - 2-minute setup guide
-- [docs/SETUP.md](docs/SETUP.md) - Detailed setup instructions
 
 ## Requirements
 
@@ -144,7 +143,12 @@ MIT License - see [LICENSE](LICENSE) file
 
 ## Roadmap
 
-See [MISSING_FEATURES.md](MISSING_FEATURES.md) for planned features.
+Future enhancements planned:
+- Advanced filtering and sorting
+- Data visualization (brain images)
+- MRIQC and fMRIPrep integration
+- Multi-user support
+- Docker deployment
 
 ---
 

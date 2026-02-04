@@ -1,275 +1,120 @@
-# Data Explorer - Quick Start Guide
+# Data Explorer - Quick Start
 
-Get up and running in 2 minutes! ⚡
+Get running in 2 minutes.
 
-## 🚀 Installation
+## Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
-
-# One-command installation (works on all platforms!)
 python bin/explorer.py install
 ```
 
-**That's it!** The CLI will:
-- ✅ Create virtual environment
-- ✅ Install all dependencies
-- ✅ Initialize the database
-- ✅ Set up logs directory
+This creates the virtual environment, installs dependencies, and initializes the database.
 
----
-
-## 🎯 Launch Application
+## Launch
 
 ```bash
 python bin/explorer.py start
 ```
 
-**✅ Works on macOS, Linux, and Windows!**
+Browser opens automatically at `http://localhost:8501` (or next available port 8500-8550).
 
-**What happens:**
-- Automatically finds available port (default: 8501, range: 8500-8550)
-- Opens browser at `http://localhost:8501` (or next available)
-- Shows you the port and URL
+## First-Time Setup
 
----
+In the browser:
 
-## ⚙️ First-Time Setup (In Browser)
-
-1. **BIDS Directory**
-   ```
-   Enter path: /Users/pndagiji/Documents/TrackTBI/TrackTBI
-   ```
-
-2. **Pennsieve Credentials**
-   - Dataset: `TrackTBI`
-   - API Key: `your_key_here`
-   - API Secret: `your_secret_here`
-
+1. **BIDS Directory**: Enter path to your BIDS dataset
+2. **Pennsieve Credentials**:
+   - Dataset name
+   - API Key
+   - API Secret
 3. **Click "Initialize Dataset"**
-   - Wait for 5 steps to complete (~2-5 minutes)
-   - Automatically redirects to dashboard when done
+4. Wait ~2-5 minutes for indexing
+5. Dashboard opens automatically
 
----
+Done!
 
-## 📋 Essential Commands
+## Common Commands
 
-### Check Status
 ```bash
-./explorer status
-```
-**Shows:**
-- Running status (yes/no)
-- PID and port
-- CPU and memory usage
-- Virtual environment status
-- Database status
-
-### View Logs
-```bash
-./explorer logs
-```
-**Shows:**
-- Live application logs
-- Press Ctrl+C to exit
-
-### Stop Application
-```bash
-./explorer stop
+python bin/explorer.py status    # Check if running
+python bin/explorer.py logs      # View live logs
+python bin/explorer.py stop      # Stop application
+python bin/explorer.py restart   # Restart application
+python bin/explorer.py update    # Update from GitHub
+python bin/explorer.py test      # Run tests
+python bin/explorer.py config    # Show configuration
+python bin/explorer.py help      # Show all commands
 ```
 
-### Restart Application
+## Troubleshooting
+
+**Can't connect to Pennsieve?**
+- Verify credentials are correct
+- Check internet connection
+- Ensure dataset name is exact (case-sensitive)
+
+**Port conflict?**
+- CLI automatically finds next available port (8500-8550)
+
+**Database issues?**
 ```bash
-./explorer restart
+python bin/explorer.py clean
+python bin/explorer.py install
 ```
 
----
-
-## 🔧 Maintenance Commands
-
-### Update to Latest Version
+**Still stuck?**
 ```bash
-./explorer update
-```
-**Does:**
-- Pull latest code from GitHub
-- Update dependencies
-- Preserves your data and configuration
-
-### Run Tests
-```bash
-./explorer test
-```
-**Tests:**
-- Database functionality
-- All dependencies
-- Module imports
-
-### View Configuration
-```bash
-./explorer config
-```
-**Shows:**
-- Current .env settings
-- BIDS path
-- Pennsieve credentials
-
-### Clean Install
-```bash
-./explorer clean
-./explorer install
-```
-**Removes:**
-- Virtual environment
-- Cache files
-- (Optionally) Database
-
----
-
-## 💡 Common Workflows
-
-### First Time Setup
-```bash
-git clone https://github.com/phindagijimana/data_explorer.git
-cd data-explorer
-./explorer install
-./explorer start
-# Configure in browser, then use normally
+python bin/explorer.py logs      # Check error messages
+python bin/explorer.py status    # Verify running state
 ```
 
-### Daily Use
-```bash
-cd data-explorer
-./explorer start
-# Work in browser
-./explorer stop
-```
+## Using the Application
 
-### After Git Pull
-```bash
-git pull
-./explorer update
-./explorer restart
-```
-
-### Troubleshooting
-```bash
-./explorer status    # Check what's running
-./explorer logs      # See error messages
-./explorer restart   # Try restarting
-./explorer test      # Verify installation
-```
-
----
-
-## 🆘 Getting Help
-
-### Show All Commands
-```bash
-./explorer help
-```
-
-### Command-Specific Help
-Most commands show helpful error messages if something goes wrong.
-
----
-
-## 🎨 Using the Application
-
-Once running, navigate through the sidebar:
-
+**Pages:**
 1. **Setup** - Initial configuration (one-time)
-2. **Dashboard** - Overview and statistics
+2. **Dashboard** - Statistics and overview
 3. **Subject Browser** - Search and filter subjects
-4. **Subject Detail** - View individual subject data
+4. **Subject Detail** - View scans, update QC status
 5. **Download Manager** - Queue and download files
 6. **QC Dashboard** - Quality control workflow
 
----
+**Common Tasks:**
+- **Search subjects**: Subject Browser → Search box
+- **Filter by QC**: Subject Browser → Status dropdown
+- **Update QC**: Click subject → Change status → Update
+- **Download files**: Subject Detail → Add to Queue → Download Manager → Start
+- **Export data**: Any table → Export CSV button
 
-## 🔑 Key Features
+## Configuration
 
-| Feature | How To |
-|---------|--------|
-| **Search subjects** | Go to Subject Browser → Enter ID |
-| **Filter by QC status** | Subject Browser → Select status dropdown |
-| **Update QC status** | Click subject → Change status → Update |
-| **Download files** | Subject Detail → Add to Queue → Download Manager → Start |
-| **Export data** | Any page with table → Export to CSV button |
-| **View QC stats** | QC Dashboard → Overview section |
+Optional: Create `.env` file for default settings:
 
----
-
-## ⚡ Pro Tips
-
-1. **Port Conflict?** 
-   - CLI automatically finds next available port (8500-8550)
-   
-2. **Multiple Datasets?**
-   - Stop current: `./explorer stop`
-   - Update .env with new paths
-   - Restart: `./explorer start`
-
-3. **Check Before Starting**
-   ```bash
-   ./explorer status  # See if already running
-   ```
-
-4. **Keep Logs Open While Working**
-   ```bash
-   ./explorer logs    # In separate terminal
-   ```
-
-5. **Quick Restart After Code Changes**
-   ```bash
-   ./explorer restart
-   ```
-
----
-
-## 📦 What Gets Installed?
-
-```
-data-explorer/
-├── venv/              ← Virtual environment
-├── data/
-│   └── tracktbi.db    ← SQLite database
-├── logs/              ← Application logs
-├── .explorer.pid      ← Process ID (when running)
-├── .explorer.port     ← Port number (when running)
-└── .env               ← Your configuration
+```env
+BIDS_ROOT=/path/to/bids/dataset
+PENNSIEVE_API_KEY=your_key
+PENNSIEVE_API_SECRET=your_secret
+PENNSIEVE_DATASET_NAME=your_dataset
 ```
 
+Or configure via UI on first launch.
+
+## Requirements
+
+- Python 3.8+
+- Pennsieve account with API credentials
+- BIDS-formatted dataset
+
+## Support
+
+- **Documentation**: [README.md](README.md)
+- **Issues**: [GitHub Issues](https://github.com/phindagijimana/data_explorer/issues)
+
 ---
 
-## 🚫 Uninstall
+**That's it!** Start exploring your data:
 
 ```bash
-./explorer stop
-./explorer clean
-cd ..
-rm -rf data-explorer
+python bin/explorer.py start
 ```
-
----
-
-## 🎉 You're Ready!
-
-```bash
-./explorer start
-```
-
-Open browser → Configure → Explore your data!
-
----
-
-**Need more help?** Check the full documentation:
-- [README.md](README.md) - Complete documentation
-- [SETUP.md](docs/SETUP.md) - Detailed setup guide
-- [GitHub Issues](https://github.com/phindagijimana/data_explorer/issues) - Report problems
-
----
-
-**Happy exploring!** 🧠✨
