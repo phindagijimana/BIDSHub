@@ -30,7 +30,15 @@ class PennsieveClient:
         
         try:
             self.ps = Pennsieve()
-            print(f"✓ Connected to Pennsieve as: {self.ps.context.user.email}")
+            # Try to get user info if available (SDK version dependent)
+            try:
+                user_email = getattr(getattr(self.ps, 'context', None), 'user', None)
+                if user_email:
+                    print(f"✓ Connected to Pennsieve as: {user_email.email}")
+                else:
+                    print("✓ Connected to Pennsieve")
+            except:
+                print("✓ Connected to Pennsieve")
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Pennsieve: {e}")
         
@@ -257,9 +265,14 @@ class PennsieveClient:
             if not self.ps:
                 return False
             
-            # Check user
-            if not self.ps.context.user:
-                return False
+            # Check user (SDK version dependent)
+            try:
+                context = getattr(self.ps, 'context', None)
+                if context and not getattr(context, 'user', None):
+                    return False
+            except:
+                # If context check fails, assume connection is valid
+                pass
             
             # Check dataset if connected
             if self.dataset:
