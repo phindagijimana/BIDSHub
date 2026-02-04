@@ -174,7 +174,10 @@ def init_database(db_path='data/tracktbi.db'):
         conn.commit()
         print(f"✓ Database initialized successfully at: {db_path}")
         print(f"✓ Created tables: subjects, scans, download_queue, qc_history, metadata")
-        print(f"✓ Created {cursor.execute('SELECT COUNT(*) FROM sqlite_master WHERE type=\"index\"').fetchone()[0]} indexes")
+        
+        # Get index count
+        index_count = cursor.execute('SELECT COUNT(*) FROM sqlite_master WHERE type="index"').fetchone()[0]
+        print(f"✓ Created {index_count} indexes")
         
         return True
         
