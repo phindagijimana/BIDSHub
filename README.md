@@ -55,10 +55,8 @@ Data Explorer is a web-based application for exploring, managing, and downloadin
 git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
 
-# 2. One-command installation
-./explorer install          # Mac/Linux
-# OR
-explorer.bat install        # Windows
+# 2. One-command installation (works on all platforms)
+python explorer.py install
 ```
 
 This will:
@@ -104,11 +102,21 @@ PENNSIEVE_DATASET_NAME=your_dataset_name
 
 ## CLI Commands
 
-Data Explorer includes a unified CLI for easy management:
+Data Explorer includes a unified CLI for easy management across all platforms:
+
+### **Recommended: Cross-Platform CLI (Works Everywhere!)**
 
 ```bash
-./explorer <command>        # Mac/Linux
-explorer.bat <command>      # Windows
+python explorer.py <command>
+```
+
+**Works on:** ✅ macOS, ✅ Linux, ✅ Windows
+
+### **Platform-Specific CLIs (Alternative)**
+
+```bash
+./explorer <command>        # Mac/Linux only
+explorer.bat <command>      # Windows only
 ```
 
 ### Available Commands
@@ -131,39 +139,49 @@ explorer.bat <command>      # Windows
 
 ```bash
 # First time setup
-./explorer install
+python explorer.py install
 
 # Start application
-./explorer start
+python explorer.py start
 
 # Check status
-./explorer status
+python explorer.py status
 
 # View logs
-./explorer logs
+python explorer.py logs
 
 # Stop application
-./explorer stop
+python explorer.py stop
 ```
+
+**Works on macOS, Linux, and Windows!** ✅
 
 ### Starting the Application
 
-**Option 1: CLI (Recommended)**
+**Option 1: CLI (Recommended - Works Everywhere)**
+
+```bash
+python explorer.py start
+```
+
+**Works on:** ✅ macOS, ✅ Linux, ✅ Windows
+
+**Option 2: Platform-Specific CLIs**
 
 ```bash
 ./explorer start          # Mac/Linux
 explorer.bat start        # Windows
 ```
 
-**Option 2: Smart Launcher**
+**Option 3: Smart Launchers**
 
 ```bash
-./launch.sh              # Mac/Linux
 python launch.py         # Cross-platform
+./launch.sh              # Mac/Linux
 launch.bat               # Windows
 ```
 
-**Option 3: Manual Launch**
+**Option 4: Manual Launch**
 
 ```bash
 # Activate virtual environment
