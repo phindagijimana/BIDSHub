@@ -191,7 +191,7 @@ def cmd_install():
     
     print()
     print_success("Installation complete!")
-    print_info(f"Run 'python {sys.argv[0]} start' to launch the application")
+    print_info("Run './explorer start' to launch the application")
 
 
 # Command: start
@@ -222,7 +222,7 @@ def cmd_start():
     # Check virtual environment
     if not os.path.exists(VENV_DIR):
         print_error("Virtual environment not found")
-        print_info(f"Run 'python {sys.argv[0]} install' first")
+        print_info("Run './explorer install' first")
         sys.exit(1)
     
     # Start application
@@ -248,7 +248,7 @@ def cmd_start():
         )
     
     print_success("Started")
-    print_info(f"Run 'python {sys.argv[0]} status' to check status")
+    print_info("Run './explorer status' to check status")
     print_info("The browser should open automatically")
 
 
@@ -463,11 +463,11 @@ def cmd_update():
         print_success("Dependencies updated")
     else:
         print_warning("Virtual environment not found")
-        print_info(f"Run 'python {sys.argv[0]} install' first")
+        print_info("Run './explorer install' first")
     
     print()
     print_success("Update complete!")
-    print_info(f"Run 'python {sys.argv[0]} restart' to apply changes")
+    print_info("Run './explorer restart' to apply changes")
 
 
 # Command: test
@@ -582,7 +582,7 @@ def cmd_clean():
     
     print()
     print_success("Cleanup complete!")
-    print_info(f"Run 'python {sys.argv[0]} install' to reinstall")
+    print_info("Run './explorer install' to reinstall")
 
 
 # Command: config
@@ -609,7 +609,7 @@ def cmd_help():
     """Show help message."""
     print_header(f"{APP_NAME} CLI")
     print()
-    print(f"Usage: python {sys.argv[0]} <command> [options]")
+    print("Usage: ./explorer <command>")
     print()
     print("Commands:")
     print("  install   Install dependencies and initialize database")
@@ -625,11 +625,11 @@ def cmd_help():
     print("  help      Show this help message")
     print()
     print("Examples:")
-    print(f"  python {sys.argv[0]} install      # First time setup")
-    print(f"  python {sys.argv[0]} start        # Launch the app")
-    print(f"  python {sys.argv[0]} status       # Check if running")
-    print(f"  python {sys.argv[0]} logs         # View logs")
-    print(f"  python {sys.argv[0]} restart      # Restart the app")
+    print("  ./explorer install      # First time setup")
+    print("  ./explorer start        # Launch the app")
+    print("  ./explorer status       # Check if running")
+    print("  ./explorer logs         # View logs")
+    print("  ./explorer restart      # Restart the app")
     print()
     print(f"Platform: {platform.system()} {platform.release()}")
     print(f"Python: {sys.version.split()[0]}")

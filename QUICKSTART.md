@@ -7,7 +7,7 @@ Get running in 2 minutes.
 ```bash
 git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
-python bin/explorer.py install
+./explorer install        # macOS/Linux: ./explorer install | Windows: explorer install
 ```
 
 This creates the virtual environment, installs dependencies, and initializes the database.
@@ -15,7 +15,7 @@ This creates the virtual environment, installs dependencies, and initializes the
 ## Launch
 
 ```bash
-python bin/explorer.py start
+./explorer start
 ```
 
 Browser opens automatically at `http://localhost:8501` (or next available port 8500-8550).
@@ -38,14 +38,14 @@ Done!
 ## Common Commands
 
 ```bash
-python bin/explorer.py status    # Check if running
-python bin/explorer.py logs      # View live logs
-python bin/explorer.py stop      # Stop application
-python bin/explorer.py restart   # Restart application
-python bin/explorer.py update    # Update from GitHub
-python bin/explorer.py test      # Run tests
-python bin/explorer.py config    # Show configuration
-python bin/explorer.py help      # Show all commands
+./explorer status    # Check if running
+./explorer logs      # View live logs
+./explorer stop      # Stop application
+./explorer restart   # Restart application
+./explorer update    # Update from GitHub
+./explorer test      # Run tests
+./explorer config    # Show configuration
+./explorer help      # Show all commands
 ```
 
 ## Troubleshooting
@@ -60,14 +60,14 @@ python bin/explorer.py help      # Show all commands
 
 **Database issues?**
 ```bash
-python bin/explorer.py clean
-python bin/explorer.py install
+./explorer clean
+./explorer install
 ```
 
 **Still stuck?**
 ```bash
-python bin/explorer.py logs      # Check error messages
-python bin/explorer.py status    # Verify running state
+./explorer logs      # Check error messages
+./explorer status    # Verify running state
 ```
 
 ## Using the Application
@@ -116,5 +116,5 @@ Or configure via UI on first launch.
 **That's it!** Start exploring your data:
 
 ```bash
-python bin/explorer.py start
+./explorer start
 ```

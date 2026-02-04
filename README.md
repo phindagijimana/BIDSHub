@@ -23,10 +23,10 @@ git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
 
 # Install (one command)
-python bin/explorer.py install
+./explorer install
 
 # Launch
-python bin/explorer.py start
+./explorer start
 ```
 
 The browser opens automatically at `http://localhost:8501` (or next available port).
@@ -43,10 +43,11 @@ The browser opens automatically at `http://localhost:8501` (or next available po
 ## CLI Commands
 
 ```bash
-python bin/explorer.py <command>
+./explorer <command>        # macOS/Linux
+explorer <command>          # Windows
 ```
 
-**Works on macOS, Linux, and Windows.**
+**Cross-platform:** Same commands work everywhere.
 
 | Command | Description |
 |---------|-------------|

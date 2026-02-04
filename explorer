@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""
+Data Explorer CLI Wrapper
+Simple wrapper that delegates to bin/explorer.py
+
+Usage: ./explorer <command>
+"""
+
+import sys
+import os
+from pathlib import Path
+
+# Get the directory where this script is located
+script_dir = Path(__file__).parent.absolute()
+
+# Path to the actual CLI script
+cli_script = script_dir / "bin" / "explorer.py"
+
+# Execute the CLI script with all arguments
+os.execv(sys.executable, [sys.executable, str(cli_script)] + sys.argv[1:])
