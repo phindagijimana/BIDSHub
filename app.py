@@ -671,7 +671,215 @@ def page_qc():
     st.markdown('<h1 class="main-header">Quality Control Dashboard</h1>', 
                 unsafe_allow_html=True)
     
-    st.info("QC dashboard coming in Phase 4...")
+    if not st.session_state.db:
+        st.warning("Please complete setup first")
+        return
+    
+    # Initialize QC manager
+    if 'qc_manager' not in st.session_state:
+        from src.qc_manager import QCManager
+        st.session_state.qc_manager = QCManager(st.session_state.db)
+    
+    qc_mgr = st.session_state.qc_manager
+    
+    # QC Overview
+    st.markdown('<h2 class="section-header">QC Overview</h2>', 
+                unsafe_allow_html=True)
+    
+    summary = qc_mgr.get_qc_summary()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Pending",
+            summary['pending'],
+            delta=f"{summary['pending_pct']:.1f}%"
+        )
+    
+    with col2:
+        st.metric(
+            "Pass",
+            summary['pass'],
+            delta=f"{summary['pass_pct']:.1f}%"
+        )
+    
+    with col3:
+        st.metric(
+            "Needs Review",
+            summary['needs_review'],
+            delta=f"{summary['needs_review_pct']:.1f}%"
+        )
+    
+    with col4:
+        st.metric(
+            "Fail",
+            summary['fail'],
+            delta=f"{summary['fail_pct']:.1f}%"
+        )
+    
+    # Progress bar
+    reviewed = summary['total'] - summary['pending']
+    if summary['total'] > 0:
+        progress = reviewed / summary['total']
+        st.progress(progress)
+        st.caption(f"Progress: {reviewed}/{summary['total']} subjects reviewed ({summary['reviewed_pct']:.1f}%)")
+    
+    st.markdown("---")
+    
+    # Filters
+    st.markdown('<h2 class="section-header">Filter</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        status_filter = st.selectbox(
+            "QC Status",
+            options=['all', 'pending', 'pass', 'fail', 'needs_review'],
+            key="qc_dashboard_status_filter"
+        )
+    
+    with col2:
+        session_filter = st.selectbox(
+            "Session",
+            options=['all', '2WK', '6MO', 'both'],
+            key="qc_dashboard_session_filter"
+        )
+    
+    with col3:
+        flagged_only = st.checkbox(
+            "Flagged only",
+            key="qc_dashboard_flagged_only"
+        )
+    
+    # Get filtered subjects
+    if flagged_only:
+        subjects = qc_mgr.get_flagged_subjects()
+    else:
+        subjects = qc_mgr.get_subjects_by_qc_status(status_filter)
+    
+    # Apply session filter
+    if session_filter != 'all':
+        from src.utils import filter_subjects
+        subjects = filter_subjects(subjects, {'session': session_filter})
+    
+    st.markdown("---")
+    
+    # Subjects table
+    st.markdown(f'<h2 class="section-header">Subjects ({len(subjects)})</h2>', 
+                unsafe_allow_html=True)
+    
+    if subjects:
+        from src.utils import create_subject_dataframe
+        df = create_subject_dataframe(subjects)
+        
+        # Display table
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            height=300
+        )
+        
+        # Bulk actions
+        st.markdown("### Bulk Actions")
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            bulk_status = st.selectbox(
+                "Set status to",
+                options=['pass', 'fail', 'needs_review'],
+                key="bulk_qc_status"
+            )
+        
+        with col2:
+            st.write("")
+            st.write("")
+            if st.button("Apply to Filtered", use_container_width=True):
+                subject_ids = [s['subject_id'] for s in subjects]
+                count = qc_mgr.bulk_update_qc(
+                    subject_ids=subject_ids,
+                    qc_status=bulk_status,
+                    reviewed_by="bulk_update"
+                )
+                st.success(f"✓ Updated {count} subjects to {bulk_status}")
+                st.rerun()
+        
+        with col3:
+            st.write("")
+            st.write("")
+            if st.button("Export QC Report", use_container_width=True):
+                report = qc_mgr.export_qc_report()
+                
+                # Convert to CSV
+                import json
+                from src.utils import create_subject_dataframe
+                
+                df_export = create_subject_dataframe(subjects)
+                csv = df_export.to_csv(index=False)
+                
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name=f"qc_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+    else:
+        st.info("No subjects match the filters")
+    
+    st.markdown("---")
+    
+    # Recent QC Activity
+    st.markdown('<h2 class="section-header">Recent QC Activity</h2>', 
+                unsafe_allow_html=True)
+    
+    activity = qc_mgr.get_recent_qc_activity(limit=10)
+    
+    if activity:
+        from src.qc_manager import format_qc_history_entry
+        
+        for entry in activity:
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                text = format_qc_history_entry(entry)
+                st.text(text)
+            
+            with col2:
+                if entry.get('notes'):
+                    with st.expander("View Notes"):
+                        st.text(entry['notes'])
+    else:
+        st.info("No recent QC activity")
+    
+    st.markdown("---")
+    
+    # QC Progress Summary
+    st.markdown('<h2 class="section-header">Progress Summary</h2>', 
+                unsafe_allow_html=True)
+    
+    progress_data = qc_mgr.get_qc_progress()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric(
+            "Reviewed",
+            f"{progress_data['reviewed']}/{progress_data['total_subjects']}",
+            delta=f"{progress_data['progress_pct']:.1f}% complete"
+        )
+    
+    with col2:
+        if progress_data['reviewed'] > 0:
+            st.metric(
+                "Pass Rate",
+                f"{progress_data['pass_rate']:.1f}%",
+                delta="of reviewed subjects"
+            )
+        else:
+            st.metric("Pass Rate", "—", delta="No subjects reviewed yet")
 
 
 def page_subject_detail():
