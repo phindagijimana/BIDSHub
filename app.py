@@ -123,46 +123,52 @@ def render_sidebar():
             current = st.session_state.current_page
             
             # Dashboard
-            if st.button("Dashboard", 
+            dashboard_label = "▶ Dashboard" if current == 'dashboard' else "Dashboard"
+            if st.button(dashboard_label, 
                         use_container_width=True,
-                        type="primary" if current == 'dashboard' else "secondary"):
+                        key="nav_dashboard"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
             
             # Subjects
-            if st.button("Subjects", 
+            subjects_label = "▶ Subjects" if current in ['subjects', 'subject_detail'] else "Subjects"
+            if st.button(subjects_label, 
                         use_container_width=True,
-                        type="primary" if current in ['subjects', 'subject_detail'] else "secondary"):
+                        key="nav_subjects"):
                 st.session_state.current_page = 'subjects'
                 st.rerun()
             
             # Download Manager
-            if st.button("Download Manager", 
+            downloads_label = "▶ Download Manager" if current == 'downloads' else "Download Manager"
+            if st.button(downloads_label, 
                         use_container_width=True,
-                        type="primary" if current == 'downloads' else "secondary"):
+                        key="nav_downloads"):
                 st.session_state.current_page = 'downloads'
                 st.rerun()
             
             # QC Dashboard
-            if st.button("QC Dashboard", 
+            qc_label = "▶ QC Dashboard" if current == 'qc' else "QC Dashboard"
+            if st.button(qc_label, 
                         use_container_width=True,
-                        type="primary" if current == 'qc' else "secondary"):
+                        key="nav_qc"):
                 st.session_state.current_page = 'qc'
                 st.rerun()
             
             # Export
-            if st.button("Export", 
+            export_label = "▶ Export" if current == 'export' else "Export"
+            if st.button(export_label, 
                         use_container_width=True,
-                        type="primary" if current == 'export' else "secondary"):
+                        key="nav_export"):
                 st.session_state.current_page = 'export'
                 st.rerun()
             
             st.markdown("---")
             
             # Settings
-            if st.button("Settings", 
+            settings_label = "▶ Settings" if current == 'setup' else "Settings"
+            if st.button(settings_label, 
                         use_container_width=True,
-                        type="primary" if current == 'setup' else "secondary"):
+                        key="nav_settings"):
                 st.session_state.current_page = 'setup'
                 st.rerun()
         
