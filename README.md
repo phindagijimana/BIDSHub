@@ -48,21 +48,41 @@ Data Explorer is a web-based application for exploring, managing, and downloadin
 
 ### Setup
 
+### Quick Install (Recommended)
+
 ```bash
 # 1. Clone the repository
-git clone <repository-url>
+git clone https://github.com/phindagijimana/data_explorer.git
 cd data-explorer
 
-# 2. Create virtual environment
+# 2. One-command installation
+./explorer install          # Mac/Linux
+# OR
+explorer.bat install        # Windows
+```
+
+This will:
+- Create virtual environment
+- Install all dependencies
+- Initialize the database
+- Set up logs directory
+
+### Manual Installation
+
+```bash
+# 1. Create virtual environment
 python -m venv venv
 
-# 3. Activate virtual environment
+# 2. Activate virtual environment
 source venv/bin/activate  # Mac/Linux
 # OR
 venv\Scripts\activate     # Windows
 
-# 4. Install dependencies
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Initialize database
+python scripts/init_db.py
 
 # 5. Configure environment variables
 cp .env.example .env
@@ -82,43 +102,79 @@ PENNSIEVE_DATASET_NAME=your_dataset_name
 
 ## Usage
 
-### Starting the Application
+## CLI Commands
 
-**Option 1: Smart Launcher (Recommended)**
-
-The smart launcher automatically finds an available port between 8500-8550:
+Data Explorer includes a unified CLI for easy management:
 
 ```bash
-# Mac/Linux
-./launch.sh
-
-# OR use Python launcher (cross-platform)
-python launch.py
-
-# Windows
-launch.bat
+./explorer <command>        # Mac/Linux
+explorer.bat <command>      # Windows
 ```
 
-**Option 2: Manual Launch**
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `install` | Install dependencies and initialize database |
+| `start` | Start the application (auto-finds port 8500-8550) |
+| `stop` | Stop the application |
+| `restart` | Restart the application |
+| `status` | Check if running (PID, port, CPU, memory) |
+| `logs` | View live application logs |
+| `update` | Pull latest code and update dependencies |
+| `test` | Run tests (database, imports, modules) |
+| `clean` | Remove virtual environment and cache |
+| `config` | Show current configuration |
+| `help` | Show all commands |
+
+### Quick Start
+
+```bash
+# First time setup
+./explorer install
+
+# Start application
+./explorer start
+
+# Check status
+./explorer status
+
+# View logs
+./explorer logs
+
+# Stop application
+./explorer stop
+```
+
+### Starting the Application
+
+**Option 1: CLI (Recommended)**
+
+```bash
+./explorer start          # Mac/Linux
+explorer.bat start        # Windows
+```
+
+**Option 2: Smart Launcher**
+
+```bash
+./launch.sh              # Mac/Linux
+python launch.py         # Cross-platform
+launch.bat               # Windows
+```
+
+**Option 3: Manual Launch**
 
 ```bash
 # Activate virtual environment
 source venv/bin/activate  # Mac/Linux
-# OR
 venv\Scripts\activate     # Windows
 
 # Start the application
 streamlit run app.py
 ```
 
-**Option 3: Specify Port**
-
-```bash
-# Launch on specific port
-streamlit run app.py --server.port 8505
-```
-
-The application will open in your browser automatically. Default ports: 8500-8550.
+The application automatically finds an available port (default: 8501, range: 8500-8550) and opens in your browser.
 
 ### First-Time Setup
 

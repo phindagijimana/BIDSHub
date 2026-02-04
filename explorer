@@ -1,0 +1,496 @@
+#!/bin/bash
+#
+# Data Explorer CLI - Unified command-line interface
+# Usage: ./explorer <command> [options]
+#
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
+APP_NAME="Data Explorer"
+VENV_DIR="venv"
+LOG_DIR="logs"
+PID_FILE=".explorer.pid"
+PORT_FILE=".explorer.port"
+
+# Helper functions
+print_header() {
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+print_info() {
+    echo -e "${CYAN}ℹ${NC} $1"
+}
+
+# Command: install
+cmd_install() {
+    print_header "Installing $APP_NAME"
+    echo ""
+    
+    # Check Python
+    if ! command -v python3 &> /dev/null; then
+        print_error "Python 3 not found"
+        exit 1
+    fi
+    print_success "Python 3 found: $(python3 --version)"
+    
+    # Create virtual environment
+    if [ ! -d "$VENV_DIR" ]; then
+        print_info "Creating virtual environment..."
+        python3 -m venv $VENV_DIR
+        print_success "Virtual environment created"
+    else
+        print_warning "Virtual environment already exists"
+    fi
+    
+    # Activate virtual environment
+    source $VENV_DIR/bin/activate
+    
+    # Upgrade pip
+    print_info "Upgrading pip..."
+    pip install --upgrade pip --quiet
+    print_success "pip upgraded"
+    
+    # Install dependencies
+    print_info "Installing dependencies..."
+    pip install -r requirements.txt --quiet
+    print_success "Dependencies installed"
+    
+    # Initialize database
+    print_info "Initializing database..."
+    python scripts/init_db.py
+    print_success "Database initialized"
+    
+    # Create logs directory
+    mkdir -p $LOG_DIR
+    
+    echo ""
+    print_success "Installation complete!"
+    print_info "Run './explorer start' to launch the application"
+}
+
+# Command: start
+cmd_start() {
+    print_header "Starting $APP_NAME"
+    echo ""
+    
+    # Check if already running
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat $PID_FILE)
+        if ps -p $PID > /dev/null 2>&1; then
+            PORT=$(cat $PORT_FILE 2>/dev/null || echo "unknown")
+            print_warning "Already running (PID: $PID, Port: $PORT)"
+            print_info "URL: http://localhost:$PORT"
+            exit 0
+        else
+            # Stale PID file
+            rm -f $PID_FILE $PORT_FILE
+        fi
+    fi
+    
+    # Check virtual environment
+    if [ ! -d "$VENV_DIR" ]; then
+        print_error "Virtual environment not found"
+        print_info "Run './explorer install' first"
+        exit 1
+    fi
+    
+    # Start application
+    print_info "Launching application..."
+    ./launch.py &
+    
+    echo $! > $PID_FILE
+    
+    # Wait a bit for port to be determined
+    sleep 2
+    
+    # Try to find the port
+    PORT=$(lsof -ti:8501,8500-8550 -sTCP:LISTEN | head -1 | xargs -I {} lsof -Pan -p {} -i | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
+    if [ ! -z "$PORT" ]; then
+        echo $PORT > $PORT_FILE
+        print_success "Started on port $PORT"
+        print_info "URL: http://localhost:$PORT"
+    else
+        print_success "Started"
+        print_info "Check logs for URL: ./explorer logs"
+    fi
+}
+
+# Command: stop
+cmd_stop() {
+    print_header "Stopping $APP_NAME"
+    echo ""
+    
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat $PID_FILE)
+        if ps -p $PID > /dev/null 2>&1; then
+            print_info "Stopping process $PID..."
+            kill $PID
+            sleep 1
+            
+            # Force kill if still running
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID
+            fi
+            
+            rm -f $PID_FILE $PORT_FILE
+            print_success "Stopped"
+        else
+            print_warning "Not running (stale PID file)"
+            rm -f $PID_FILE $PORT_FILE
+        fi
+    else
+        # Try to find and kill streamlit processes
+        PIDS=$(pgrep -f "streamlit run app.py" || echo "")
+        if [ ! -z "$PIDS" ]; then
+            print_info "Found running processes: $PIDS"
+            kill $PIDS 2>/dev/null || true
+            sleep 1
+            print_success "Stopped"
+        else
+            print_warning "Not running"
+        fi
+    fi
+}
+
+# Command: restart
+cmd_restart() {
+    print_header "Restarting $APP_NAME"
+    echo ""
+    
+    cmd_stop
+    echo ""
+    sleep 1
+    cmd_start
+}
+
+# Command: status
+cmd_status() {
+    print_header "$APP_NAME Status"
+    echo ""
+    
+    # Check if running
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat $PID_FILE)
+        if ps -p $PID > /dev/null 2>&1; then
+            PORT=$(cat $PORT_FILE 2>/dev/null || echo "unknown")
+            print_success "Running"
+            echo "  PID:  $PID"
+            echo "  Port: $PORT"
+            echo "  URL:  http://localhost:$PORT"
+            
+            # Show resource usage
+            CPU=$(ps -p $PID -o %cpu= || echo "N/A")
+            MEM=$(ps -p $PID -o %mem= || echo "N/A")
+            echo "  CPU:  ${CPU}%"
+            echo "  MEM:  ${MEM}%"
+        else
+            print_error "Not running (stale PID file)"
+            rm -f $PID_FILE $PORT_FILE
+        fi
+    else
+        # Try to find streamlit processes
+        PIDS=$(pgrep -f "streamlit run app.py" || echo "")
+        if [ ! -z "$PIDS" ]; then
+            print_warning "Running but no PID file found"
+            echo "  PIDs: $PIDS"
+            
+            # Try to find port
+            PORT=$(lsof -ti:8501,8500-8550 -sTCP:LISTEN | head -1 | xargs -I {} lsof -Pan -p {} -i | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
+            if [ ! -z "$PORT" ]; then
+                echo "  Port: $PORT"
+                echo "  URL:  http://localhost:$PORT"
+            fi
+        else
+            print_error "Not running"
+        fi
+    fi
+    
+    echo ""
+    
+    # Virtual environment status
+    if [ -d "$VENV_DIR" ]; then
+        print_success "Virtual environment: installed"
+    else
+        print_error "Virtual environment: not found"
+    fi
+    
+    # Database status
+    if [ -f "data/tracktbi.db" ]; then
+        DB_SIZE=$(du -h data/tracktbi.db | cut -f1)
+        print_success "Database: $DB_SIZE"
+    else
+        print_warning "Database: not initialized"
+    fi
+}
+
+# Command: logs
+cmd_logs() {
+    print_header "$APP_NAME Logs"
+    echo ""
+    
+    # Streamlit logs location
+    STREAMLIT_LOG_DIR="$HOME/.streamlit/logs"
+    
+    if [ -d "$STREAMLIT_LOG_DIR" ]; then
+        LATEST_LOG=$(ls -t $STREAMLIT_LOG_DIR/*.log 2>/dev/null | head -1)
+        if [ ! -z "$LATEST_LOG" ]; then
+            print_info "Showing logs from: $LATEST_LOG"
+            print_info "Press Ctrl+C to exit"
+            echo ""
+            tail -f "$LATEST_LOG"
+        else
+            print_warning "No logs found"
+        fi
+    else
+        print_warning "Streamlit logs directory not found"
+        print_info "Start the application first: ./explorer start"
+    fi
+}
+
+# Command: update
+cmd_update() {
+    print_header "Updating $APP_NAME"
+    echo ""
+    
+    # Check if git repo
+    if [ ! -d ".git" ]; then
+        print_error "Not a git repository"
+        exit 1
+    fi
+    
+    # Pull latest code
+    print_info "Pulling latest code..."
+    git pull origin main
+    print_success "Code updated"
+    
+    # Activate virtual environment
+    if [ -d "$VENV_DIR" ]; then
+        source $VENV_DIR/bin/activate
+        
+        # Update dependencies
+        print_info "Updating dependencies..."
+        pip install --upgrade -r requirements.txt --quiet
+        print_success "Dependencies updated"
+    else
+        print_warning "Virtual environment not found"
+        print_info "Run './explorer install' first"
+    fi
+    
+    echo ""
+    print_success "Update complete!"
+    print_info "Run './explorer restart' to apply changes"
+}
+
+# Command: test
+cmd_test() {
+    print_header "Running Tests"
+    echo ""
+    
+    if [ ! -d "$VENV_DIR" ]; then
+        print_error "Virtual environment not found"
+        exit 1
+    fi
+    
+    source $VENV_DIR/bin/activate
+    
+    # Run Python tests
+    print_info "Running unit tests..."
+    
+    # Test database
+    print_info "Testing database..."
+    python scripts/init_db.py > /dev/null 2>&1
+    print_success "Database: OK"
+    
+    # Test imports
+    print_info "Testing imports..."
+    python -c "import streamlit; import bids; import pennsieve; import pandas; import plotly" 2>/dev/null
+    print_success "Dependencies: OK"
+    
+    # Test modules
+    print_info "Testing modules..."
+    python -c "from src import database, bids_loader, pennsieve_client, theme, utils" 2>/dev/null
+    print_success "Modules: OK"
+    
+    echo ""
+    print_success "All tests passed!"
+}
+
+# Command: clean
+cmd_clean() {
+    print_header "Cleaning $APP_NAME"
+    echo ""
+    
+    print_warning "This will remove:"
+    echo "  - Virtual environment"
+    echo "  - Database"
+    echo "  - Logs"
+    echo "  - Cache files"
+    echo ""
+    
+    read -p "Are you sure? (y/N): " -n 1 -r
+    echo ""
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Cancelled"
+        exit 0
+    fi
+    
+    # Stop if running
+    cmd_stop > /dev/null 2>&1
+    
+    # Remove virtual environment
+    if [ -d "$VENV_DIR" ]; then
+        print_info "Removing virtual environment..."
+        rm -rf $VENV_DIR
+        print_success "Virtual environment removed"
+    fi
+    
+    # Remove database
+    if [ -f "data/tracktbi.db" ]; then
+        print_info "Removing database..."
+        rm -f data/tracktbi.db
+        print_success "Database removed"
+    fi
+    
+    # Remove logs
+    if [ -d "$LOG_DIR" ]; then
+        print_info "Removing logs..."
+        rm -rf $LOG_DIR
+        print_success "Logs removed"
+    fi
+    
+    # Remove Python cache
+    print_info "Removing cache files..."
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    rm -rf .streamlit 2>/dev/null || true
+    print_success "Cache removed"
+    
+    # Remove PID files
+    rm -f $PID_FILE $PORT_FILE
+    
+    echo ""
+    print_success "Cleanup complete!"
+    print_info "Run './explorer install' to reinstall"
+}
+
+# Command: config
+cmd_config() {
+    print_header "$APP_NAME Configuration"
+    echo ""
+    
+    if [ -f ".env" ]; then
+        print_success "Configuration file: .env"
+        echo ""
+        cat .env | grep -v "^#" | grep -v "^$"
+    else
+        print_warning "No .env file found"
+        print_info "Create from template: cp .env.example .env"
+    fi
+}
+
+# Command: help
+cmd_help() {
+    print_header "$APP_NAME CLI"
+    echo ""
+    echo "Usage: ./explorer <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  ${GREEN}install${NC}   Install dependencies and initialize database"
+    echo "  ${GREEN}start${NC}     Start the application"
+    echo "  ${GREEN}stop${NC}      Stop the application"
+    echo "  ${GREEN}restart${NC}   Restart the application"
+    echo "  ${GREEN}status${NC}    Check application status"
+    echo "  ${GREEN}logs${NC}      View application logs (live)"
+    echo "  ${GREEN}update${NC}    Pull latest code and update dependencies"
+    echo "  ${GREEN}test${NC}      Run tests"
+    echo "  ${GREEN}clean${NC}     Remove virtual environment and cache"
+    echo "  ${GREEN}config${NC}    Show configuration"
+    echo "  ${GREEN}help${NC}      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ./explorer install      # First time setup"
+    echo "  ./explorer start        # Launch the app"
+    echo "  ./explorer status       # Check if running"
+    echo "  ./explorer logs         # View logs"
+    echo "  ./explorer restart      # Restart the app"
+    echo ""
+}
+
+# Main
+main() {
+    if [ $# -eq 0 ]; then
+        cmd_help
+        exit 0
+    fi
+    
+    COMMAND=$1
+    shift
+    
+    case $COMMAND in
+        install)
+            cmd_install "$@"
+            ;;
+        start)
+            cmd_start "$@"
+            ;;
+        stop)
+            cmd_stop "$@"
+            ;;
+        restart)
+            cmd_restart "$@"
+            ;;
+        status)
+            cmd_status "$@"
+            ;;
+        logs)
+            cmd_logs "$@"
+            ;;
+        update)
+            cmd_update "$@"
+            ;;
+        test)
+            cmd_test "$@"
+            ;;
+        clean)
+            cmd_clean "$@"
+            ;;
+        config)
+            cmd_config "$@"
+            ;;
+        help|--help|-h)
+            cmd_help
+            ;;
+        *)
+            print_error "Unknown command: $COMMAND"
+            echo ""
+            cmd_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
