@@ -71,38 +71,44 @@ def init_session_state():
 
 def render_breadcrumb(current_page: str, parent_page: str = None):
     """Render breadcrumb navigation at top of page."""
-    breadcrumb_html = '<div style="margin-bottom: 20px; color: #666;">'
+    # Page names mapping
+    page_names = {
+        'dashboard': 'Dashboard',
+        'subjects': 'Subjects',
+        'subject_detail': 'Subject Detail',
+        'downloads': 'Download Manager',
+        'qc': 'QC Dashboard',
+        'export': 'Export',
+        'setup': 'Settings'
+    }
     
-    # Always start with Home/Dashboard
-    if current_page == 'dashboard':
-        breadcrumb_html += '<span style="color: #002d72; font-weight: bold;">Dashboard</span>'
-    else:
-        breadcrumb_html += '<a href="#" style="color: #002d72; text-decoration: none;">Dashboard</a> > '
-        
-        # Add parent if exists
-        if parent_page:
-            page_names = {
-                'subjects': 'Subjects',
-                'downloads': 'Download Manager',
-                'qc': 'QC Dashboard',
-                'export': 'Export',
-                'setup': 'Settings'
-            }
-            breadcrumb_html += f'{page_names.get(parent_page, parent_page)} > '
-        
-        # Add current page
-        page_names = {
-            'subjects': 'Subjects',
-            'subject_detail': 'Subject Detail',
-            'downloads': 'Download Manager',
-            'qc': 'QC Dashboard',
-            'export': 'Export',
-            'setup': 'Settings'
-        }
-        breadcrumb_html += f'<span style="color: #002d72; font-weight: bold;">{page_names.get(current_page, current_page)}</span>'
+    # Build breadcrumb trail
+    breadcrumb_parts = []
     
-    breadcrumb_html += '</div>'
-    st.markdown(breadcrumb_html, unsafe_allow_html=True)
+    # Always start with Dashboard
+    if current_page != 'dashboard':
+        breadcrumb_parts.append(('dashboard', 'Dashboard'))
+    
+    # Add parent page if exists
+    if parent_page and parent_page != 'dashboard':
+        breadcrumb_parts.append((parent_page, page_names.get(parent_page, parent_page)))
+    
+    # Add current page (not clickable)
+    breadcrumb_parts.append((None, page_names.get(current_page, current_page)))
+    
+    # Render breadcrumb using columns for inline buttons
+    cols = st.columns([1] * len(breadcrumb_parts) + [8])  # Extra column for spacing
+    
+    for idx, (page_id, page_name) in enumerate(breadcrumb_parts):
+        with cols[idx]:
+            if page_id:  # Clickable breadcrumb
+                if st.button(f"← {page_name}", key=f"breadcrumb_{page_id}"):
+                    st.session_state.current_page = page_id
+                    st.rerun()
+            else:  # Current page (not clickable)
+                st.markdown(f"**{page_name}**")
+    
+    st.markdown("---")
 
 
 def render_sidebar():
