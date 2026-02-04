@@ -35,17 +35,25 @@ In the browser:
 
 Done!
 
-## Common Commands
+## All Commands
 
+| Command | Description |
+|---------|-------------|
+| `install` | Install dependencies and setup |
+| `start` | Start application |
+| `stop` | Stop application |
+| `restart` | Restart application |
+| `status` | Check status (PID, port, CPU, memory) |
+| `logs` | View live logs |
+| `update` | Update code and dependencies |
+| `test` | Run tests |
+| `config` | Show configuration |
+| `help` | Show all commands |
+
+**Usage:**
 ```bash
-./explorer status    # Check if running
-./explorer logs      # View live logs
-./explorer stop      # Stop application
-./explorer restart   # Restart application
-./explorer update    # Update from GitHub
-./explorer test      # Run tests
-./explorer config    # Show configuration
-./explorer help      # Show all commands
+./explorer <command>        # macOS/Linux
+explorer <command>          # Windows
 ```
 
 ## Troubleshooting

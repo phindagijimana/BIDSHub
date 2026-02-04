@@ -49,18 +49,7 @@ explorer <command>          # Windows
 
 **Cross-platform:** Same commands work everywhere.
 
-| Command | Description |
-|---------|-------------|
-| `install` | Install dependencies and setup |
-| `start` | Start application |
-| `stop` | Stop application |
-| `restart` | Restart application |
-| `status` | Check status (PID, port, CPU, memory) |
-| `logs` | View live logs |
-| `update` | Update code and dependencies |
-| `test` | Run tests |
-| `config` | Show configuration |
-| `help` | Show all commands |
+See [QUICKSTART.md](QUICKSTART.md) for all available commands.
 
 ## Configuration
 
