@@ -86,29 +86,37 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
         'setup': 'Settings'
     }
     
-    # Build breadcrumb with clickable parts
-    cols = st.columns([1, 0.1, 2, 10])  # Columns for: Home / separator / current / spacer
+    # Build simple breadcrumb trail
+    breadcrumb_parts = []
     
-    with cols[0]:
-        if st.button("Home", key="breadcrumb_home", type="secondary"):
-            st.session_state.current_page = 'dashboard'
-            st.rerun()
+    # Home link
+    breadcrumb_parts.append('Home')
     
-    with cols[1]:
-        st.caption("/")
+    # Parent page if exists
+    if parent_page and parent_page != 'dashboard':
+        breadcrumb_parts.append(page_names.get(parent_page, parent_page))
     
-    with cols[2]:
-        # If there's a parent, show it as clickable
+    # Current page
+    breadcrumb_parts.append(page_names.get(current_page, current_page))
+    
+    # Display breadcrumb as text
+    breadcrumb_text = ' / '.join(breadcrumb_parts)
+    st.caption(breadcrumb_text)
+    
+    # Add a single compact button to go back
+    col1, col2 = st.columns([1, 11])
+    with col1:
+        # Determine where to go back to
         if parent_page and parent_page != 'dashboard':
-            if st.button(page_names.get(parent_page, parent_page), 
-                        key=f"breadcrumb_{parent_page}", 
-                        type="secondary"):
-                st.session_state.current_page = parent_page
-                st.rerun()
-            st.caption(f"/ {page_names.get(current_page, current_page)}")
+            back_target = parent_page
+            back_label = "← Back"
         else:
-            # Just show current page as text
-            st.caption(page_names.get(current_page, current_page))
+            back_target = 'dashboard'
+            back_label = "← Home"
+        
+        if st.button(back_label, key=f"nav_back_{current_page}"):
+            st.session_state.current_page = back_target
+            st.rerun()
 
 
 def render_sidebar():
