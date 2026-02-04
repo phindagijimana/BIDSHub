@@ -70,9 +70,10 @@ def init_session_state():
 
 
 def render_breadcrumb(current_page: str, parent_page: str = None):
-    """Render breadcrumb navigation at top of page."""
-    # Only show breadcrumb if not on dashboard
-    if current_page == 'dashboard':
+    """Render breadcrumb navigation at top of page - only for nested pages."""
+    # Only show breadcrumb for nested pages (like subject detail)
+    # Top-level pages use sidebar for navigation
+    if current_page not in ['subject_detail']:
         return
     
     # Page names mapping
@@ -86,37 +87,8 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
         'setup': 'Settings'
     }
     
-    # Build simple breadcrumb trail
-    breadcrumb_parts = []
-    
-    # Home link
-    breadcrumb_parts.append('Home')
-    
-    # Parent page if exists
-    if parent_page and parent_page != 'dashboard':
-        breadcrumb_parts.append(page_names.get(parent_page, parent_page))
-    
-    # Current page
-    breadcrumb_parts.append(page_names.get(current_page, current_page))
-    
-    # Display breadcrumb as text
-    breadcrumb_text = ' / '.join(breadcrumb_parts)
-    st.caption(breadcrumb_text)
-    
-    # Add a single compact button to go back
-    col1, col2 = st.columns([1, 11])
-    with col1:
-        # Determine where to go back to
-        if parent_page and parent_page != 'dashboard':
-            back_target = parent_page
-            back_label = "← Back"
-        else:
-            back_target = 'dashboard'
-            back_label = "← Home"
-        
-        if st.button(back_label, key=f"nav_back_{current_page}"):
-            st.session_state.current_page = back_target
-            st.rerun()
+    # Simple text breadcrumb for context
+    st.caption(f"Home / {page_names.get(parent_page, 'Subjects')} / {page_names.get(current_page, current_page)}")
 
 
 def render_sidebar():
