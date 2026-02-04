@@ -71,6 +71,10 @@ def init_session_state():
 
 def render_breadcrumb(current_page: str, parent_page: str = None):
     """Render breadcrumb navigation at top of page."""
+    # Only show breadcrumb if not on dashboard
+    if current_page == 'dashboard':
+        return
+    
     # Page names mapping
     page_names = {
         'dashboard': 'Dashboard',
@@ -83,32 +87,34 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
     }
     
     # Build breadcrumb trail
-    breadcrumb_parts = []
+    breadcrumb_html = '<div style="margin-bottom: 10px; padding: 8px 0; font-size: 14px; color: #666;">'
+    breadcrumb_items = []
     
     # Always start with Dashboard
-    if current_page != 'dashboard':
-        breadcrumb_parts.append(('dashboard', 'Dashboard'))
+    breadcrumb_items.append('<a href="#" onclick="return false;" style="color: #0068c9; text-decoration: none; cursor: pointer;">Home</a>')
     
     # Add parent page if exists
     if parent_page and parent_page != 'dashboard':
-        breadcrumb_parts.append((parent_page, page_names.get(parent_page, parent_page)))
+        breadcrumb_items.append(f'<span style="color: #0068c9;">{page_names.get(parent_page, parent_page)}</span>')
     
-    # Add current page (not clickable)
-    breadcrumb_parts.append((None, page_names.get(current_page, current_page)))
+    # Add current page
+    breadcrumb_items.append(f'<span style="color: #262730; font-weight: 500;">{page_names.get(current_page, current_page)}</span>')
     
-    # Render breadcrumb using columns for inline buttons
-    cols = st.columns([1] * len(breadcrumb_parts) + [8])  # Extra column for spacing
+    # Join with separator
+    breadcrumb_html += ' / '.join(breadcrumb_items)
+    breadcrumb_html += '</div>'
     
-    for idx, (page_id, page_name) in enumerate(breadcrumb_parts):
-        with cols[idx]:
-            if page_id:  # Clickable breadcrumb
-                if st.button(f"← {page_name}", key=f"breadcrumb_{page_id}"):
-                    st.session_state.current_page = page_id
-                    st.rerun()
-            else:  # Current page (not clickable)
-                st.markdown(f"**{page_name}**")
+    # Display as simple text breadcrumb
+    st.markdown(breadcrumb_html, unsafe_allow_html=True)
     
-    st.markdown("---")
+    # Add functional back button for navigation
+    if len(breadcrumb_items) > 2 or (len(breadcrumb_items) == 2 and current_page != 'dashboard'):
+        col1, col2 = st.columns([1, 11])
+        with col1:
+            target = parent_page if parent_page else 'dashboard'
+            if st.button("← Back", key=f"back_to_{target}"):
+                st.session_state.current_page = target
+                st.rerun()
 
 
 def render_sidebar():
