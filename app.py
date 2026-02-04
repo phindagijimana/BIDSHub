@@ -86,19 +86,29 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
         'setup': 'Settings'
     }
     
-    # Build breadcrumb trail as text only (clean, minimal)
-    breadcrumb_parts = ['Home']
+    # Build breadcrumb with clickable parts
+    cols = st.columns([1, 0.1, 2, 10])  # Columns for: Home / separator / current / spacer
     
-    # Add parent page if exists
-    if parent_page and parent_page != 'dashboard':
-        breadcrumb_parts.append(page_names.get(parent_page, parent_page))
+    with cols[0]:
+        if st.button("Home", key="breadcrumb_home", type="secondary"):
+            st.session_state.current_page = 'dashboard'
+            st.rerun()
     
-    # Add current page
-    breadcrumb_parts.append(page_names.get(current_page, current_page))
+    with cols[1]:
+        st.caption("/")
     
-    # Display breadcrumb
-    breadcrumb_text = ' / '.join(breadcrumb_parts)
-    st.caption(breadcrumb_text)
+    with cols[2]:
+        # If there's a parent, show it as clickable
+        if parent_page and parent_page != 'dashboard':
+            if st.button(page_names.get(parent_page, parent_page), 
+                        key=f"breadcrumb_{parent_page}", 
+                        type="secondary"):
+                st.session_state.current_page = parent_page
+                st.rerun()
+            st.caption(f"/ {page_names.get(current_page, current_page)}")
+        else:
+            # Just show current page as text
+            st.caption(page_names.get(current_page, current_page))
 
 
 def render_sidebar():
@@ -343,7 +353,14 @@ def page_dashboard():
                 unsafe_allow_html=True)
     
     if not st.session_state.db:
-        st.warning("Please complete setup first")
+        st.warning("Please complete setup to view the dashboard")
+        st.info("Initialize your BIDS dataset and Pennsieve connection to get started.")
+        
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("Go to Settings", use_container_width=True):
+                st.session_state.current_page = 'setup'
+                st.rerun()
         return
     
     # Get statistics
