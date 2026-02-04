@@ -1,0 +1,26 @@
+# Web Framework
+streamlit>=1.28.0
+
+# BIDS Dataset Processing
+pybids>=0.16.0
+
+# Pennsieve Cloud Integration
+pennsieve>=7.0.0
+
+# Data Manipulation & Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization
+plotly>=5.17.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+
+# Utilities
+humanize>=4.8.0
+tqdm>=4.66.0
+
+# Optional: Testing (for future)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
