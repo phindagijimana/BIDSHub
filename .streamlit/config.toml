@@ -1,0 +1,25 @@
+[server]
+# Port configuration - will use ports in range 8500-8550
+port = 8501
+headless = false
+runOnSave = false
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+# Automatically open browser on launch
+gatherUsageStats = false
+serverAddress = "localhost"
+
+[theme]
+# Theme configuration (overridden by custom CSS in app)
+primaryColor = "#002d72"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[client]
+# Show error details
+showErrorDetails = true
+toolbarMode = "minimal"

@@ -84,6 +84,23 @@ PENNSIEVE_DATASET_NAME=your_dataset_name
 
 ### Starting the Application
 
+**Option 1: Smart Launcher (Recommended)**
+
+The smart launcher automatically finds an available port between 8500-8550:
+
+```bash
+# Mac/Linux
+./launch.sh
+
+# OR use Python launcher (cross-platform)
+python launch.py
+
+# Windows
+launch.bat
+```
+
+**Option 2: Manual Launch**
+
 ```bash
 # Activate virtual environment
 source venv/bin/activate  # Mac/Linux
@@ -94,7 +111,14 @@ venv\Scripts\activate     # Windows
 streamlit run app.py
 ```
 
-The application will open in your browser at `http://localhost:8501`
+**Option 3: Specify Port**
+
+```bash
+# Launch on specific port
+streamlit run app.py --server.port 8505
+```
+
+The application will open in your browser automatically. Default ports: 8500-8550.
 
 ### First-Time Setup
 
