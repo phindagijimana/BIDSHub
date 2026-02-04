@@ -107,14 +107,93 @@
 
 ---
 
+### ✅ Phase 2: Core UI (2.5 hours)
+
+**Status**: Complete
+
+#### 2.1 App Structure ✅
+- [x] Created `app.py` (500+ lines)
+- [x] Session state management
+- [x] Sidebar navigation
+- [x] Page routing system
+
+#### 2.2 Theme ✅
+- [x] Created `src/theme.py` (400+ lines)
+- [x] Chase Bank navy blue (#002d72)
+- [x] Complete CSS for all components
+- [x] Status badge rendering
+- [x] NO EMOJIS policy
+- [x] Professional banking aesthetic
+
+#### 2.3 Setup Page ✅
+- [x] BIDS directory input
+- [x] Pennsieve credentials (API key/secret)
+- [x] Dataset name input
+- [x] Connection verification
+- [x] Initialization workflow with progress bar
+- [x] Index all subjects
+- [x] Populate database
+- [x] Error handling
+- [x] Auto-navigate to dashboard
+
+#### 2.4 Dashboard Page ✅
+- [x] Overview metrics (subjects, sessions, scans)
+- [x] Completeness statistics
+- [x] QC status overview
+- [x] Quick action buttons
+- [x] Real-time stats from database
+
+#### 2.5 Subject Browser ✅
+- [x] Search functionality
+- [x] QC status filter
+- [x] Session filter (2WK/6MO/both)
+- [x] Subject table with pandas DataFrame
+- [x] Professional table styling
+- [x] Subject count display
+- [x] Export to CSV
+- [x] Navigate to subject detail
+
+#### 2.6 Subject Detail ✅
+- [x] QC status dropdown
+- [x] Flag for review checkbox
+- [x] Update QC button
+- [x] QC notes textarea
+- [x] Session 2WK scans table
+- [x] Session 6MO scans table
+- [x] File size display
+- [x] Stub vs Downloaded detection
+- [x] Back navigation
+- [x] Scan listing with modality/suffix
+
+#### 2.7 Utilities ✅
+- [x] Created `src/utils.py` (300+ lines)
+- [x] File size formatting
+- [x] Timestamp formatting
+- [x] Subject filtering
+- [x] Completeness calculations
+- [x] DataFrame creation
+- [x] BIDS directory validation
+- [x] Disk space checking
+
+**Key Features Built**:
+- Complete navigation system
+- Professional Chase Bank theme
+- Full setup workflow with Pennsieve
+- Dashboard with real statistics
+- Subject browser with multi-filter
+- Subject detail with QC management
+- Scan viewing for both sessions
+
+---
+
 ## 🚧 Current Status
 
-**Completed**: Phase 1 Foundation ✅  
-**Current**: Ready for Phase 2 - Core UI  
-**Next Steps**: Build Streamlit application
+**Completed**: Phase 1 Foundation ✅, Phase 2 Core UI ✅  
+**Current**: Ready for Phase 3 - Download Manager  
+**Next Steps**: Build download functionality
 
-**Time Spent**: ~2 hours  
-**Time Remaining**: ~6-8 hours
+**Time Spent**: ~4.5 hours  
+**Time Remaining**: ~3.5-5.5 hours
 
 ---
 
