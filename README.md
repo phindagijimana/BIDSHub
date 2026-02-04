@@ -64,30 +64,6 @@ PENNSIEVE_DATASET_NAME=your_dataset
 
 Or configure via UI on first launch.
 
-## Project Structure
-
-```
-data-explorer/
-├── app.py                    # Main application
-├── bin/                      # CLI tools
-│   ├── explorer.py          # Cross-platform CLI (recommended)
-│   ├── explorer             # Unix CLI
-│   ├── explorer.bat         # Windows CLI
-│   └── launch.*             # Alternative launchers
-├── src/
-│   ├── bids_loader.py       # BIDS integration
-│   ├── pennsieve_client.py  # Cloud API client
-│   ├── database.py          # Data storage
-│   ├── download_manager.py  # Downloads
-│   ├── qc_manager.py        # Quality control
-│   ├── theme.py             # UI styling
-│   └── utils.py             # Helpers
-├── scripts/                  # Internal utilities
-│   └── init_db.py           # Database setup
-├── data/                     # Local storage
-└── tests/                    # Tests
-```
-
 ## Troubleshooting
 
 **Port conflict?**
@@ -100,15 +76,15 @@ data-explorer/
 
 **Database issues?**
 ```bash
-python bin/explorer.py clean
-python bin/explorer.py install
+./explorer clean
+./explorer install
 ```
 
 **More help:**
 ```bash
-python bin/explorer.py help
-python bin/explorer.py status
-python bin/explorer.py logs
+./explorer help
+./explorer status
+./explorer logs
 ```
 
 ## Documentation
@@ -128,7 +104,7 @@ MIT License - see [LICENSE](LICENSE) file
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/phindagijimana/data_explorer/issues)
-- **Documentation**: See `docs/` directory
+- **Documentation**: [QUICKSTART.md](QUICKSTART.md)
 - **Questions**: Open an issue
 
 ## Roadmap
