@@ -6,6 +6,7 @@ BIDS-structured neuroimaging datasets.
 """
 
 from bids import BIDSLayout
+from bids.layout import BIDSLayoutIndexer
 from typing import List, Dict, Optional
 from pathlib import Path
 import os
@@ -32,14 +33,17 @@ class BIDSLoader:
         print("This may take a moment...")
         
         # For Pennsieve stub datasets, we need to be lenient with JSON files
-        # Stub files may not be valid JSON
+        # Stub files may not be valid JSON - use custom indexer
+        indexer = BIDSLayoutIndexer(
+            ignore=['code/', 'stimuli/', 'sourcedata/', 'derivatives/'],
+            index_metadata=False  # Skip indexing metadata from stub JSON files
+        )
+        
         self.layout = BIDSLayout(
             str(self.bids_root),
             validate=validate,
             derivatives=False,  # Don't index derivatives for MVP
-            ignore=['code/', 'stimuli/', 'sourcedata/', 'derivatives/'],
-            # Skip indexing metadata from JSON files (they're stub files)
-            index_metadata=False
+            indexer=indexer
         )
         
         print(f"✓ Loaded {len(self.get_subjects())} subjects")
@@ -101,6 +105,15 @@ class BIDSLoader:
         
         scans = []
         for f in files:
+            # Get extension from entities or parse from filename
+            ext = f.entities.get('extension', '')
+            if not ext and hasattr(f, 'filename'):
+                # Parse extension from filename if not in entities
+                import os
+                _, ext = os.path.splitext(f.filename)
+                if ext.startswith('.'):
+                    ext = ext[1:]  # Remove leading dot
+            
             scan_info = {
                 'subject': f.entities.get('subject'),
                 'session': f.entities.get('session'),
@@ -111,7 +124,7 @@ class BIDSLoader:
                 'run': f.entities.get('run'),
                 'file_path': f.path,
                 'filename': f.filename,
-                'extension': f.extension
+                'extension': ext
             }
             scans.append(scan_info)
         
