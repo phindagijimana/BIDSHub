@@ -37,16 +37,186 @@ class Database:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
     
+    # ===== Dataset Operations (v1.5+) =====
+    
+    def add_dataset(self, name: str, platform: str, 
+                    api_key: str = None, api_secret: str = None,
+                    dataset_id_external: str = None, 
+                    root_path: str = None) -> Optional[int]:
+        """
+        Add a new dataset to the database.
+        
+        Args:
+            name: Dataset name (must be unique)
+            platform: 'pennsieve' or 'openneuro'
+            api_key: API key (will be stored as-is, encryption recommended)
+            api_secret: API secret
+            dataset_id_external: External dataset ID (Pennsieve name or OpenNeuro ID)
+            root_path: Local root path for dataset
+            
+        Returns:
+            int: Dataset ID if successful, None otherwise
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO datasets 
+                (name, platform, api_key_encrypted, api_secret_encrypted, 
+                 dataset_id_external, root_path, status, created_date)
+                VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+            """, (name, platform, api_key, api_secret, dataset_id_external, 
+                 root_path, datetime.now()))
+            
+            dataset_id = cursor.lastrowid
+            conn.commit()
+            return dataset_id
+            
+        except sqlite3.Error as e:
+            print(f"Error adding dataset {name}: {e}")
+            return None
+            
+        finally:
+            conn.close()
+    
+    def get_dataset(self, dataset_id: int) -> Optional[Dict]:
+        """
+        Get dataset by ID.
+        
+        Args:
+            dataset_id: Dataset ID
+            
+        Returns:
+            Dict with dataset data or None
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM datasets WHERE id = ?", (dataset_id,))
+            row = cursor.fetchone()
+            
+            return dict(row) if row else None
+            
+        except sqlite3.Error as e:
+            print(f"Error getting dataset {dataset_id}: {e}")
+            return None
+            
+        finally:
+            conn.close()
+    
+    def get_all_datasets(self, status: str = None) -> List[Dict]:
+        """
+        Get all datasets, optionally filtered by status.
+        
+        Args:
+            status: Filter by status ('active', 'inactive', 'error'), None for all
+            
+        Returns:
+            List of dataset dictionaries
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            if status:
+                cursor.execute("SELECT * FROM datasets WHERE status = ? ORDER BY created_date DESC", (status,))
+            else:
+                cursor.execute("SELECT * FROM datasets ORDER BY created_date DESC")
+            
+            return [dict(row) for row in cursor.fetchall()]
+            
+        except sqlite3.Error as e:
+            print(f"Error getting datasets: {e}")
+            return []
+            
+        finally:
+            conn.close()
+    
+    def update_dataset(self, dataset_id: int, **kwargs) -> bool:
+        """
+        Update dataset fields.
+        
+        Args:
+            dataset_id: Dataset ID
+            **kwargs: Fields to update (name, platform, status, root_path, etc.)
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Build update query from kwargs
+            allowed_fields = ['name', 'platform', 'api_key_encrypted', 'api_secret_encrypted',
+                            'dataset_id_external', 'root_path', 'status', 'last_sync_date']
+            
+            updates = []
+            values = []
+            
+            for key, value in kwargs.items():
+                if key in allowed_fields:
+                    updates.append(f"{key} = ?")
+                    values.append(value)
+            
+            if not updates:
+                return False
+            
+            query = f"UPDATE datasets SET {', '.join(updates)} WHERE id = ?"
+            values.append(dataset_id)
+            
+            cursor.execute(query, values)
+            conn.commit()
+            return cursor.rowcount > 0
+            
+        except sqlite3.Error as e:
+            print(f"Error updating dataset {dataset_id}: {e}")
+            return False
+            
+        finally:
+            conn.close()
+    
+    def delete_dataset(self, dataset_id: int) -> bool:
+        """
+        Delete dataset and all associated data (CASCADE).
+        
+        Args:
+            dataset_id: Dataset ID
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("DELETE FROM datasets WHERE id = ?", (dataset_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+            
+        except sqlite3.Error as e:
+            print(f"Error deleting dataset {dataset_id}: {e}")
+            return False
+            
+        finally:
+            conn.close()
+    
     # ===== Subject Operations =====
     
-    def add_subject(self, subject_id: str, has_2wk: bool = False, 
+    def add_subject(self, dataset_id: int, subject_id: str, 
+                   local_subject_id: str = None,
+                   has_2wk: bool = False, 
                    has_6mo: bool = False, scan_count_2wk: int = 0,
                    scan_count_6mo: int = 0) -> bool:
         """
         Add a new subject to the database.
         
         Args:
-            subject_id: Subject identifier
+            dataset_id: Dataset ID (FK to datasets table)
+            subject_id: Full subject identifier (for backwards compatibility)
+            local_subject_id: Local subject ID within dataset (e.g., "001")
             has_2wk: Whether subject has 2WK session
             has_6mo: Whether subject has 6MO session
             scan_count_2wk: Number of scans in 2WK session
@@ -59,12 +229,26 @@ class Database:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            # Default local_subject_id to subject_id if not provided
+            if local_subject_id is None:
+                local_subject_id = subject_id
+            
+            # Use INSERT OR IGNORE followed by UPDATE to handle duplicates
+            # (v1.5+ uses composite unique key on dataset_id, local_subject_id)
             cursor.execute("""
-                INSERT OR REPLACE INTO subjects 
-                (subject_id, has_2wk, has_6mo, scan_count_2wk, scan_count_6mo, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (subject_id, has_2wk, has_6mo, scan_count_2wk, scan_count_6mo, 
-                 datetime.now()))
+                INSERT INTO subjects 
+                (dataset_id, subject_id, local_subject_id, has_2wk, has_6mo, 
+                 scan_count_2wk, scan_count_6mo, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset_id, local_subject_id) DO UPDATE SET
+                    subject_id = excluded.subject_id,
+                    has_2wk = excluded.has_2wk,
+                    has_6mo = excluded.has_6mo,
+                    scan_count_2wk = excluded.scan_count_2wk,
+                    scan_count_6mo = excluded.scan_count_6mo,
+                    last_updated = excluded.last_updated
+            """, (dataset_id, subject_id, local_subject_id, has_2wk, has_6mo, 
+                 scan_count_2wk, scan_count_6mo, datetime.now()))
             
             conn.commit()
             return True
@@ -76,12 +260,13 @@ class Database:
         finally:
             conn.close()
     
-    def get_subject(self, subject_id: str) -> Optional[Dict]:
+    def get_subject(self, subject_id: str, dataset_id: int = None) -> Optional[Dict]:
         """
         Get subject by ID.
         
         Args:
-            subject_id: Subject identifier
+            subject_id: Subject identifier (local_subject_id)
+            dataset_id: Optional dataset ID to filter by
             
         Returns:
             Dict with subject data or None
@@ -90,7 +275,19 @@ class Database:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT * FROM subjects WHERE subject_id = ?", (subject_id,))
+            if dataset_id:
+                cursor.execute("""
+                    SELECT * FROM subjects 
+                    WHERE local_subject_id = ? AND dataset_id = ?
+                """, (subject_id, dataset_id))
+            else:
+                # Backwards compatibility - try to find by subject_id or local_subject_id
+                cursor.execute("""
+                    SELECT * FROM subjects 
+                    WHERE subject_id = ? OR local_subject_id = ?
+                    LIMIT 1
+                """, (subject_id, subject_id))
+            
             row = cursor.fetchone()
             
             return dict(row) if row else None
@@ -98,6 +295,35 @@ class Database:
         except sqlite3.Error as e:
             print(f"Error getting subject {subject_id}: {e}")
             return None
+            
+        finally:
+            conn.close()
+    
+    def get_subjects_by_dataset(self, dataset_id: int) -> List[Dict]:
+        """
+        Get all subjects for a specific dataset.
+        
+        Args:
+            dataset_id: Dataset ID
+            
+        Returns:
+            List of subject dictionaries
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM subjects 
+                WHERE dataset_id = ?
+                ORDER BY local_subject_id
+            """, (dataset_id,))
+            
+            return [dict(row) for row in cursor.fetchall()]
+            
+        except sqlite3.Error as e:
+            print(f"Error getting subjects for dataset {dataset_id}: {e}")
+            return []
             
         finally:
             conn.close()
@@ -210,6 +436,42 @@ class Database:
             
         except sqlite3.Error as e:
             print(f"Error updating QC for subject {subject_id}: {e}")
+            return False
+            
+        finally:
+            conn.close()
+    
+    def update_automated_qc(self, subject_id: str, status: str, 
+                           results: str = None) -> bool:
+        """
+        Update automated QC status for a subject.
+        
+        Args:
+            subject_id: Subject identifier
+            status: QC status ('pass', 'warning', 'fail')
+            results: JSON string with detailed QC results
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE subjects
+                SET automated_qc_status = ?,
+                    automated_qc_date = ?,
+                    automated_qc_results = ?,
+                    last_updated = ?
+                WHERE subject_id = ?
+            """, (status, datetime.now(), results, datetime.now(), subject_id))
+            
+            conn.commit()
+            return True
+            
+        except sqlite3.Error as e:
+            print(f"Error updating automated QC for {subject_id}: {e}")
             return False
             
         finally:

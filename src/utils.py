@@ -268,15 +268,30 @@ def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
     if not subjects:
         return pd.DataFrame()
     
+    # Check if multi-dataset (subjects have dataset info)
+    has_dataset_info = any('_dataset_name' in s for s in subjects)
+    
     df_data = []
     for subject in subjects:
-        df_data.append({
+        row = {}
+        
+        # Add Dataset column first if multi-dataset
+        if has_dataset_info:
+            platform = subject.get('_dataset_platform', '')
+            platform_icon = '🔐' if platform == 'pennsieve' else '🌍'
+            dataset_name = subject.get('_dataset_name', 'Unknown')
+            row['Dataset'] = f"{platform_icon} {dataset_name}"
+        
+        # Standard columns
+        row.update({
             'Subject ID': subject['subject_id'],
             'QC Status': subject.get('qc_status', 'pending').title(),
             'Sessions': get_session_labels(subject),
             'Scans': f"{subject.get('scan_count_2wk', 0) + subject.get('scan_count_6mo', 0)}",
             'Flagged': 'Yes' if subject.get('flagged') else ''
         })
+        
+        df_data.append(row)
     
     return pd.DataFrame(df_data)
 

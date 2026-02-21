@@ -31,21 +31,53 @@ def init_database(db_path='data/tracktbi.db'):
         # Enable foreign keys
         cursor.execute("PRAGMA foreign_keys = ON")
         
+        # Create datasets table (v1.5+)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS datasets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                platform TEXT NOT NULL,
+                api_key_encrypted TEXT,
+                api_secret_encrypted TEXT,
+                dataset_id_external TEXT,
+                root_path TEXT,
+                status TEXT DEFAULT 'active',
+                created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_sync_date TIMESTAMP,
+                CHECK (platform IN ('pennsieve', 'openneuro')),
+                CHECK (status IN ('active', 'inactive', 'error'))
+            )
+        """)
+        
         # Create subjects table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS subjects (
-                subject_id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dataset_id INTEGER NOT NULL,
+                subject_id TEXT NOT NULL,
+                local_subject_id TEXT NOT NULL,
                 has_2wk BOOLEAN DEFAULT 0,
                 has_6mo BOOLEAN DEFAULT 0,
                 scan_count_2wk INTEGER DEFAULT 0,
                 scan_count_6mo INTEGER DEFAULT 0,
+                
+                -- Manual QC (human review)
                 qc_status TEXT DEFAULT 'pending',
                 qc_notes TEXT,
                 qc_reviewed_by TEXT,
                 qc_reviewed_date TIMESTAMP,
                 flagged BOOLEAN DEFAULT 0,
+                
+                -- Automated QC (computer checks)
+                automated_qc_status TEXT DEFAULT 'pending',
+                automated_qc_date TIMESTAMP,
+                automated_qc_results TEXT,
+                
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CHECK (qc_status IN ('pending', 'pass', 'fail', 'needs_review'))
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
+                UNIQUE(dataset_id, local_subject_id),
+                CHECK (qc_status IN ('pending', 'pass', 'fail', 'needs_review')),
+                CHECK (automated_qc_status IN ('pending', 'pass', 'warning', 'fail'))
             )
         """)
         
@@ -53,6 +85,7 @@ def init_database(db_path='data/tracktbi.db'):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS scans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dataset_id INTEGER NOT NULL,
                 subject_id TEXT NOT NULL,
                 session TEXT NOT NULL,
                 modality TEXT NOT NULL,
@@ -65,7 +98,8 @@ def init_database(db_path='data/tracktbi.db'):
                 qc_status TEXT DEFAULT 'pending',
                 qc_notes TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (subject_id) REFERENCES subjects(subject_id) ON DELETE CASCADE,
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
+                FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
                 CHECK (qc_status IN ('pending', 'pass', 'fail', 'needs_review'))
             )
         """)
@@ -74,6 +108,7 @@ def init_database(db_path='data/tracktbi.db'):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS download_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dataset_id INTEGER NOT NULL,
                 scan_id INTEGER NOT NULL,
                 subject_id TEXT NOT NULL,
                 file_path TEXT NOT NULL,
@@ -84,6 +119,7 @@ def init_database(db_path='data/tracktbi.db'):
                 started_date TIMESTAMP,
                 completed_date TIMESTAMP,
                 error_message TEXT,
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
                 FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
                 CHECK (status IN ('queued', 'downloading', 'completed', 'failed', 'paused'))
             )
@@ -93,14 +129,14 @@ def init_database(db_path='data/tracktbi.db'):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS qc_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                subject_id TEXT,
+                subject_id INTEGER,
                 scan_id INTEGER,
                 old_status TEXT,
                 new_status TEXT,
                 notes TEXT,
                 reviewed_by TEXT,
                 reviewed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (subject_id) REFERENCES subjects(subject_id) ON DELETE CASCADE,
+                FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
                 FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE
             )
         """)
@@ -123,6 +159,11 @@ def init_database(db_path='data/tracktbi.db'):
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_subjects_flagged 
             ON subjects(flagged)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subjects_automated_qc_status 
+            ON subjects(automated_qc_status)
         """)
         
         cursor.execute("""
@@ -160,10 +201,31 @@ def init_database(db_path='data/tracktbi.db'):
             ON qc_history(subject_id)
         """)
         
+        # Create indexes for dataset_id columns (v1.5+)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subjects_dataset 
+            ON subjects(dataset_id)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_scans_dataset 
+            ON scans(dataset_id)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_queue_dataset 
+            ON download_queue(dataset_id)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subjects_composite 
+            ON subjects(dataset_id, local_subject_id)
+        """)
+        
         # Insert initial metadata
         cursor.execute("""
             INSERT OR IGNORE INTO metadata (key, value) 
-            VALUES ('db_version', '1.0.0')
+            VALUES ('db_version', '1.5.0')
         """)
         
         cursor.execute("""
@@ -173,7 +235,7 @@ def init_database(db_path='data/tracktbi.db'):
         
         conn.commit()
         print(f"[OK] Database initialized successfully at: {db_path}")
-        print(f"[OK] Created tables: subjects, scans, download_queue, qc_history, metadata")
+        print(f"[OK] Created tables: datasets, subjects, scans, download_queue, qc_history, metadata")
         
         # Get index count
         index_count = cursor.execute('SELECT COUNT(*) FROM sqlite_master WHERE type="index"').fetchone()[0]
@@ -205,7 +267,7 @@ def verify_database(db_path='data/tracktbi.db'):
         cursor = conn.cursor()
         
         # Check all tables exist
-        required_tables = ['subjects', 'scans', 'download_queue', 'qc_history', 'metadata']
+        required_tables = ['datasets', 'subjects', 'scans', 'download_queue', 'qc_history', 'metadata']
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         existing_tables = [row[0] for row in cursor.fetchall()]
         

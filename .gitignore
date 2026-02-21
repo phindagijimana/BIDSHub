@@ -88,3 +88,21 @@ Temporary Items
 
 # Internal Documents (not for GitHub)
 ROADMAP.md
+NEW_FEATURES.md
+NAVIGATION_TEST.md
+NAVIGATION_IMPROVEMENTS.md
+PENNSIEVE_MAPPING_INTEGRATION.md
+SMART_MAPPING_COMPARISON.md
+DOWNLOAD_MANAGER_TEST_RESULTS.md
+QC_DASHBOARD_TEST_RESULTS.md
+QC_DOCUMENTATION.md
+BROWSE_SUBJECTS_TEST_RESULTS.md
+SECURITY_DOCUMENTATION.md
+SECURITY_SUMMARY.md
+HPC_REMOTE_ACCESS_ANALYSIS.md
+check_security.sh
+test_navigation.py
+test_download_manager.py
+test_download_workflow.py
+test_qc_dashboard.py
+test_browse_subjects.py

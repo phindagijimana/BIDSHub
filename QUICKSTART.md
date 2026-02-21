@@ -2,6 +2,14 @@
 
 Get running in 2 minutes.
 
+## Prerequisites
+
+- Python 3.8+ (check: `python3 --version`)
+- Pennsieve account with API credentials
+- BIDS dataset
+
+**Note:** Pennsieve Agent (CLI tool) auto-installs during setup.
+
 ## Installation
 
 ```bash
