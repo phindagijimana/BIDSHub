@@ -920,7 +920,7 @@ def render_page_header(current_page: str, show_back_to_dashboard: bool = False):
     if show_back_to_dashboard and current_page != 'dashboard':
         col1, col2 = st.columns([5, 1])
         with col2:
-            if st.button("⌂ Dashboard", use_container_width=True, key=f"back_dash_{current_page}"):
+            if st.button("← Dashboard", use_container_width=True, key=f"back_dash_{current_page}"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
 
@@ -4881,7 +4881,7 @@ def page_transfer():
         if source_subjects:
             # Create scrollable file list container
             with st.container():
-                st.markdown("**📁 Subjects** (Select to transfer →)")
+                st.markdown("**Subjects** (Select to transfer →)")
                 
                 # Display subjects in expandable format
                 selected_subjects = []
@@ -4891,7 +4891,7 @@ def page_transfer():
                     
                     # Checkbox for each subject with scan count
                     if st.checkbox(
-                        f"📂 {subj['subject_id']} ({scan_count} scans)",
+                        f"[Folder] {subj['subject_id']} ({scan_count} scans)",
                         key=f"src_{subj['subject_id']}",
                         value=False
                     ):
@@ -4954,13 +4954,13 @@ def page_transfer():
             dest_subjects = st.session_state.db.get_subjects_by_dataset(dest_dataset_id)
             
             with st.container():
-                st.markdown("**📁 Current Subjects**")
+                st.markdown("**Current Subjects**")
                 
                 if dest_subjects:
                     for subj in dest_subjects[:20]:
                         sessions = st.session_state.db.get_subject_sessions(subj['subject_id'], dest_dataset_id) or []
                         scan_count = sum([s.get('scan_count', 0) for s in sessions])
-                        st.caption(f"📂 {subj['subject_id']} ({scan_count} scans)")
+                        st.caption(f"[Folder] {subj['subject_id']} ({scan_count} scans)")
                     
                     if len(dest_subjects) > 20:
                         st.caption(f"... and {len(dest_subjects) - 20} more")
