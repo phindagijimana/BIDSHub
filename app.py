@@ -952,11 +952,7 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
 
 
 def render_sidebar():
-    """Render navigation sidebar (hidden on home/landing page)."""
-    # Hide sidebar on home/landing page for clean entry point
-    if st.session_state.current_page == 'home':
-        return
-    
+    """Render navigation sidebar - always visible for consistent UX."""
     with st.sidebar:
         st.markdown('<h1 style="color: #002d72;">BIDSHub</h1>', 
                    unsafe_allow_html=True)
