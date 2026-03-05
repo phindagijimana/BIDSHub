@@ -2054,19 +2054,12 @@ def page_dashboard():
                 
                 st.markdown("Go to **Manage Datasets** to run database maintenance.")
     
-    if not st.session_state.db:
-        st.warning("Please complete setup to view the dashboard")
-        st.info("Initialize your BIDS dataset and Pennsieve connection to get started.")
-        
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            if st.button("Go to Settings", use_container_width=True):
-                st.session_state.current_page = 'setup'
-                st.rerun()
-        return
-    
     # Get statistics
     stats = st.session_state.db.get_stats()
+    
+    # Show helpful message for first-time users (v3.1.1+)
+    if stats.get('total_subjects', 0) == 0:
+        st.info("Welcome to BIDSHub! Get started by adding your first dataset in **Manage Datasets**.")
     
     st.markdown('<h2 class="section-header">Overview</h2>', 
                 unsafe_allow_html=True)
@@ -2113,29 +2106,6 @@ def page_dashboard():
     
     with col4:
         st.metric("Fail", stats.get('qc_fail', 0))
-    
-    st.markdown("---")
-    
-    # Quick actions
-    st.markdown('<h2 class="section-header">Quick Actions</h2>', 
-                unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("Browse Subjects", use_container_width=True):
-            st.session_state.current_page = 'subjects'
-            st.rerun()
-    
-    with col2:
-        if st.button("Download Manager", use_container_width=True):
-            st.session_state.current_page = 'downloads'
-            st.rerun()
-    
-    with col3:
-        if st.button("QC Dashboard", use_container_width=True):
-            st.session_state.current_page = 'qc'
-            st.rerun()
 
 
 def page_subjects():
