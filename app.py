@@ -1533,6 +1533,7 @@ def page_manage_datasets():
                                         
                                         # Index subjects to database
                                         indexed_count = 0
+                                        scan_count = 0
                                         for subject_data in subjects_data:
                                             subject_id = subject_data.get('subject_id')
                                             
@@ -1554,6 +1555,19 @@ def page_manage_datasets():
                                                     session=session
                                                 )
                                             
+                                            # Add scans
+                                            for scan in subject_data.get('scans', []):
+                                                st.session_state.db.add_scan(
+                                                    dataset_id=dataset['id'],
+                                                    subject_id=subject_id,
+                                                    session=scan.get('session', 'ses-01'),
+                                                    modality=scan.get('modality', 'unknown'),
+                                                    suffix=scan.get('suffix', ''),
+                                                    file_path=scan.get('file_path', ''),
+                                                    file_size_bytes=scan.get('size', 0)
+                                                )
+                                                scan_count += 1
+                                            
                                             indexed_count += 1
                                         
                                         # Update last sync
@@ -1562,7 +1576,7 @@ def page_manage_datasets():
                                             last_sync_date=datetime.now()
                                         )
                                         
-                                        st.success(f"[OK] Synced {indexed_count} subjects from {dataset['name']}")
+                                        st.success(f"[OK] Synced {indexed_count} subjects, {scan_count} scans from {dataset['name']}")
                                         st.rerun()
                                     else:
                                         st.error("Could not create agent for this platform")
