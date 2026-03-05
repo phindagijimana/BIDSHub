@@ -4963,7 +4963,7 @@ def page_viewer():
                         scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
                         
                         # Check if this is an OpenNeuro dataset
-                        selected_dataset = next((d for d in datasets if d['id'] == selected_dataset_id), None)
+                        selected_dataset = next((d for d in all_datasets if d['id'] == selected_dataset_id), None)
                         is_openneuro = selected_dataset and selected_dataset.get('platform') == 'openneuro'
                         
                         if not scans:
