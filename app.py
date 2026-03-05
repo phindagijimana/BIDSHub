@@ -968,12 +968,12 @@ def render_sidebar():
         # Get current page for highlighting
         current = st.session_state.current_page
         
-        # Dashboard/Home
-        dashboard_label = "> Home" if current in ['home', 'dashboard'] else "Home"
-        if st.button(dashboard_label, 
+        # Home (Landing Page)
+        home_label = "> Home" if current == 'home' else "Home"
+        if st.button(home_label, 
                     use_container_width=True,
-                    key="nav_dashboard"):
-            st.session_state.current_page = 'dashboard'
+                    key="nav_home"):
+            st.session_state.current_page = 'home'
             st.rerun()
         
         # Manage Datasets (v1.5+) - Moved to top for easy access
@@ -2033,6 +2033,140 @@ def page_manage_datasets():
                                         st.rerun()
                         else:
                             st.error("Failed to add dataset. Check database connection.")
+
+
+def page_home():
+    """Landing page for BIDSHub (v3.1.2+)."""
+    st.markdown("""
+        <style>
+        .landing-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .landing-title {
+            color: #002d72;
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+        
+        .landing-subtitle {
+            color: #003d7a;
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 30px;
+            line-height: 1.4;
+        }
+        
+        .landing-description {
+            color: #4b5563;
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 40px 0;
+            text-align: left;
+        }
+        
+        .feature-item {
+            background-color: #e6f0f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #002d72;
+        }
+        
+        .feature-title {
+            color: #002d72;
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .feature-description {
+            color: #4b5563;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .cta-section {
+            margin-top: 50px;
+        }
+        </style>
+        
+        <div class="landing-container">
+            <div class="landing-title">BIDSHub</div>
+            <div class="landing-subtitle">
+                Multi-platform neuroimaging dataset management<br>
+                and exploration tool
+            </div>
+            
+            <div class="landing-description">
+                Browse, filter, and download BIDS datasets from multiple platforms 
+                simultaneously. Cross-platform metadata filtering, unified QC workflows, 
+                and MRI viewing - all from your desktop.
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-title">7 Supported Platforms</div>
+                    <div class="feature-description">
+                        Connect to Pennsieve, OpenNeuro, DANDI, XNAT, HPC, 
+                        Remote Server, and Local datasets
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-title">Cross-Platform Filtering</div>
+                    <div class="feature-description">
+                        Filter by age, sex, diagnosis, keywords, and modalities 
+                        across all your datasets
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-title">Built-in MRI Viewer</div>
+                    <div class="feature-description">
+                        View NIfTI files directly in the app without downloading
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-title">Quality Control</div>
+                    <div class="feature-description">
+                        Scan-level QC with Pennsieve sync support and 
+                        automated validation
+                    </div>
+                </div>
+            </div>
+            
+            <div class="cta-section">
+        """, unsafe_allow_html=True)
+    
+    # Check if user has datasets
+    datasets = []
+    if st.session_state.db:
+        datasets = st.session_state.db.get_all_datasets(status='active')
+    
+    # Show appropriate button
+    if datasets and len(datasets) > 0:
+        if st.button("Go to Dashboard", type="primary", use_container_width=True, key="goto_dashboard"):
+            st.session_state.current_page = 'dashboard'
+            st.rerun()
+    else:
+        if st.button("Getting Started", type="primary", use_container_width=True, key="getting_started"):
+            st.session_state.current_page = 'dashboard'
+            st.rerun()
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 def page_dashboard():
@@ -5301,7 +5435,9 @@ def main():
     # Route to appropriate page
     page = st.session_state.current_page
     
-    if page == 'home' or page == 'dashboard':
+    if page == 'home':
+        page_home()
+    elif page == 'dashboard':
         page_dashboard()
     elif page == 'manage_datasets':
         page_manage_datasets()
@@ -5320,9 +5456,9 @@ def main():
     elif page == 'viewer':
         # Viewer page accessed via subject detail page
         st.info("Access viewer from Subject Detail page")
-        page_dashboard()
+        page_home()
     else:
-        page_dashboard()
+        page_home()
 
 
 if __name__ == "__main__":
