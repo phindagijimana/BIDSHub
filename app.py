@@ -4253,7 +4253,7 @@ def display_session_scans(session_id, scans, subject_id, platform=None, dataset_
                 with col5:
                     # View button for quick access to viewer
                     if st.button("[View]", key=f"view_{scan_id}_{idx}", help="Open in Viewer", use_container_width=True):
-                        st.session_state.selected_scan = scan
+                        st.session_state.viewer_selected_file = scan.get('file_path', '')
                         st.session_state.viewer_file_loaded = True
                         st.session_state.current_page = 'viewer'
                         st.rerun()
@@ -4799,11 +4799,7 @@ def page_viewer():
     st.markdown('<h1 class="main-header">NIfTI Viewer</h1>', 
                 unsafe_allow_html=True)
     
-    if not st.session_state.db:
-        st.warning("Please complete setup first")
-        return
-    
-    st.markdown("Browse and visualize any NIfTI image from your indexed datasets")
+    st.markdown("Browse and visualize any NIfTI image")
     
     # Two-column layout: File browser (left) | Viewer (right)
     col_browser, col_viewer = st.columns([1, 2], gap="large")
@@ -4811,122 +4807,195 @@ def page_viewer():
     with col_browser:
         st.markdown("### File Browser")
         
-        # Get all datasets
-        all_datasets = st.session_state.db.get_all_datasets(status='active')
-        
-        if not all_datasets:
-            st.info("No datasets available. Add datasets in Manage Datasets.")
-            return
-        
-        # Dataset selector
-        dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
-        selected_dataset_name = st.selectbox(
-            "Select Dataset",
-            options=list(dataset_options.keys()),
-            key="viewer_dataset_select"
+        # Browse mode selector
+        browse_mode = st.radio(
+            "Browse Mode",
+            options=["From Indexed Datasets", "From File System"],
+            key="viewer_browse_mode"
         )
         
-        if selected_dataset_name:
-            selected_dataset_id = dataset_options[selected_dataset_name]
+        st.markdown("---")
+        
+        if browse_mode == "From File System":
+            # Direct file path input
+            st.markdown("**Browse Local Files**")
             
-            # Get subjects for selected dataset
-            subjects = st.session_state.db.get_all_subjects(filters={'dataset_id': selected_dataset_id})
-            
-            if not subjects:
-                st.info("No subjects indexed. Click 'Sync' in Manage Datasets.")
-                return
-            
-            # Subject selector
-            subject_options = [s['subject_id'] for s in subjects]
-            selected_subject_id = st.selectbox(
-                "Select Subject",
-                options=subject_options,
-                key="viewer_subject_select"
+            # File path input
+            file_path_input = st.text_input(
+                "NIfTI File Path",
+                placeholder="/path/to/file.nii.gz",
+                help="Enter the full path to a NIfTI file (.nii or .nii.gz)",
+                key="viewer_file_path"
             )
             
-            if selected_subject_id:
-                # Get sessions for selected subject
-                sessions = st.session_state.db.get_subject_sessions(selected_subject_id, selected_dataset_id)
+            # Quick directory browser
+            if 'viewer_current_dir' not in st.session_state:
+                st.session_state.viewer_current_dir = str(Path.home())
+            
+            current_dir = st.text_input(
+                "Browse Directory",
+                value=st.session_state.viewer_current_dir,
+                key="viewer_dir_input",
+                help="Enter directory path to browse"
+            )
+            
+            if current_dir and os.path.isdir(current_dir):
+                st.session_state.viewer_current_dir = current_dir
                 
-                if not sessions:
-                    st.info(f"No sessions found for {selected_subject_id}")
+                # List NIfTI files in directory
+                try:
+                    nifti_files = []
+                    for item in sorted(os.listdir(current_dir)):
+                        if item.endswith('.nii') or item.endswith('.nii.gz'):
+                            full_path = os.path.join(current_dir, item)
+                            if os.path.isfile(full_path):
+                                nifti_files.append(item)
+                    
+                    if nifti_files:
+                        st.markdown(f"**NIfTI Files in Directory** ({len(nifti_files)} found)")
+                        selected_file = st.selectbox(
+                            "Select File",
+                            options=nifti_files,
+                            key="viewer_file_select"
+                        )
+                        
+                        if selected_file:
+                            file_path_input = os.path.join(current_dir, selected_file)
+                            
+                            if st.button("Load in Viewer →", use_container_width=True, type="primary"):
+                                st.session_state.viewer_selected_file = file_path_input
+                                st.session_state.viewer_file_loaded = True
+                                st.rerun()
+                    else:
+                        st.info("No NIfTI files found in this directory")
+                except PermissionError:
+                    st.error("Permission denied to read directory")
+                except Exception as e:
+                    st.error(f"Error reading directory: {str(e)}")
+            
+            # Manual path load
+            if file_path_input and os.path.exists(file_path_input):
+                st.caption(f"File exists: {Path(file_path_input).name}")
+                if st.button("Load from Path →", use_container_width=True, type="secondary"):
+                    st.session_state.viewer_selected_file = file_path_input
+                    st.session_state.viewer_file_loaded = True
+                    st.rerun()
+        
+        else:
+            # Browse from indexed datasets
+            st.markdown("**Browse Indexed Datasets**")
+            
+            if not st.session_state.db:
+                st.warning("Database not initialized")
+                return
+            
+            # Get all datasets
+            all_datasets = st.session_state.db.get_all_datasets(status='active')
+            
+            if not all_datasets:
+                st.info("No datasets available. Add datasets in Manage Datasets or switch to 'From File System' mode.")
+                return
+            
+            # Dataset selector
+            dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
+            selected_dataset_name = st.selectbox(
+                "Select Dataset",
+                options=list(dataset_options.keys()),
+                key="viewer_dataset_select"
+            )
+            
+            if selected_dataset_name:
+                selected_dataset_id = dataset_options[selected_dataset_name]
+                
+                # Get subjects for selected dataset
+                subjects = st.session_state.db.get_all_subjects(filters={'dataset_id': selected_dataset_id})
+                
+                if not subjects:
+                    st.info("No subjects indexed. Click 'Sync' in Manage Datasets or switch to 'From File System' mode.")
                     return
                 
-                # Session selector
-                session_ids = [s['session_id'] for s in sessions]
-                selected_session_id = st.selectbox(
-                    "Select Session",
-                    options=session_ids,
-                    key="viewer_session_select"
+                # Subject selector
+                subject_options = [s['subject_id'] for s in subjects]
+                selected_subject_id = st.selectbox(
+                    "Select Subject",
+                    options=subject_options,
+                    key="viewer_subject_select"
                 )
                 
-                if selected_session_id:
-                    # Get scans for selected session
-                    scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
+                if selected_subject_id:
+                    # Get sessions for selected subject
+                    sessions = st.session_state.db.get_subject_sessions(selected_subject_id, selected_dataset_id)
                     
-                    if not scans:
-                        st.info(f"No scans found for session {selected_session_id}")
+                    if not sessions:
+                        st.info(f"No sessions found for {selected_subject_id}")
                         return
                     
-                    # Filter only NIfTI files
-                    nifti_scans = [
-                        s for s in scans 
-                        if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
-                    ]
-                    
-                    if not nifti_scans:
-                        st.warning("No NIfTI files found in this session")
-                        return
-                    
-                    # Scan selector with modality info
-                    scan_labels = []
-                    for scan in nifti_scans:
-                        modality = scan.get('modality', 'unknown')
-                        suffix = scan.get('suffix', '')
-                        label = f"{modality}_{suffix}" if suffix else modality
-                        scan_labels.append(label)
-                    
-                    selected_scan_idx = st.selectbox(
-                        "Select Scan",
-                        options=range(len(nifti_scans)),
-                        format_func=lambda i: scan_labels[i],
-                        key="viewer_scan_select"
+                    # Session selector
+                    session_ids = [s['session_id'] for s in sessions]
+                    selected_session_id = st.selectbox(
+                        "Select Session",
+                        options=session_ids,
+                        key="viewer_session_select"
                     )
                     
-                    if selected_scan_idx is not None:
-                        selected_scan = nifti_scans[selected_scan_idx]
+                    if selected_session_id:
+                        # Get scans for selected session
+                        scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
                         
-                        # Display scan info
-                        st.markdown("---")
-                        st.markdown("**Selected Scan**")
-                        st.caption(f"File: {Path(selected_scan['file_path']).name}")
-                        st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
-                        st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
+                        if not scans:
+                            st.info(f"No scans found for session {selected_session_id}")
+                            return
                         
-                        # Load button
-                        if st.button("Load in Viewer →", use_container_width=True, type="primary"):
-                            st.session_state.selected_scan = selected_scan
-                            st.session_state.viewer_file_loaded = True
-                            st.rerun()
+                        # Filter only NIfTI files
+                        nifti_scans = [
+                            s for s in scans 
+                            if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
+                        ]
+                        
+                        if not nifti_scans:
+                            st.warning("No NIfTI files found in this session")
+                            return
+                        
+                        # Scan selector with modality info
+                        scan_labels = []
+                        for scan in nifti_scans:
+                            modality = scan.get('modality', 'unknown')
+                            suffix = scan.get('suffix', '')
+                            label = f"{modality}_{suffix}" if suffix else modality
+                            scan_labels.append(label)
+                        
+                        selected_scan_idx = st.selectbox(
+                            "Select Scan",
+                            options=range(len(nifti_scans)),
+                            format_func=lambda i: scan_labels[i],
+                            key="viewer_scan_select"
+                        )
+                        
+                        if selected_scan_idx is not None:
+                            selected_scan = nifti_scans[selected_scan_idx]
+                            
+                            # Display scan info
+                            st.markdown("---")
+                            st.markdown("**Selected Scan**")
+                            st.caption(f"File: {Path(selected_scan['file_path']).name}")
+                            st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
+                            st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
+                            
+                            # Load button
+                            if st.button("Load in Viewer →", use_container_width=True, type="primary"):
+                                st.session_state.viewer_selected_file = selected_scan['file_path']
+                                st.session_state.viewer_file_loaded = True
+                                st.rerun()
     
     with col_viewer:
         st.markdown("### Viewer")
         
-        # Check if scan is loaded
+        # Check if file is loaded
         if 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded:
-            selected_scan = st.session_state.get('selected_scan')
+            file_path = st.session_state.get('viewer_selected_file', '')
             
-            if not selected_scan:
-                st.info("Select a scan from the file browser and click 'Load in Viewer'")
-                return
-            
-            # Check if file is downloaded
-            file_path = selected_scan.get('file_path', '')
-            download_status = selected_scan.get('download_status', '')
-            
-            if download_status != 'completed':
-                st.warning("This scan is not downloaded yet. Download it first from Download Manager.")
-                st.caption(f"File: {Path(file_path).name}")
+            if not file_path:
+                st.info("Select a file from the file browser and click 'Load in Viewer'")
                 return
             
             # Check if file exists locally
@@ -4935,11 +5004,9 @@ def page_viewer():
                 st.caption("The file may have been moved or deleted.")
                 return
             
-            # Display scan metadata
-            st.markdown(f"**Subject:** {selected_scan.get('subject_id', 'N/A')}")
-            st.markdown(f"**Session:** {selected_scan.get('session_id', 'N/A')}")
-            st.markdown(f"**Modality:** {selected_scan.get('modality', 'N/A')} - {selected_scan.get('suffix', 'N/A')}")
-            st.caption(f"File: {Path(file_path).name}")
+            # Display file info
+            st.markdown(f"**File:** {Path(file_path).name}")
+            st.caption(f"Path: {file_path}")
             
             st.markdown("---")
             
