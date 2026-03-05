@@ -2089,8 +2089,10 @@ def page_home():
             min-height: 40px;
             display: flex;
             align-items: center;
-            justify-center: center;
-            font-size: 1.25rem;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #002d72;
         }
         
         .visual-card {
@@ -2141,7 +2143,9 @@ def page_home():
             align-items: center;
             justify-content: center;
             margin-bottom: 1rem;
-            font-size: 1.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #002d72;
         }
         
         .feature-card-title {
@@ -2181,15 +2185,15 @@ def page_home():
         # Quick features
         st.markdown("""
             <div class="quick-feature">
-                <div class="quick-feature-icon">⚡</div>
+                <div class="quick-feature-icon">[7]</div>
                 <span>7 supported platforms (Pennsieve, OpenNeuro, DANDI, XNAT, HPC, Remote)</span>
             </div>
             <div class="quick-feature">
-                <div class="quick-feature-icon">🎯</div>
+                <div class="quick-feature-icon">[+]</div>
                 <span>Cross-platform metadata filtering with BIDS validation</span>
             </div>
             <div class="quick-feature">
-                <div class="quick-feature-icon">✓</div>
+                <div class="quick-feature-icon">[OK]</div>
                 <span>Clinical-grade quality control workflows</span>
             </div>
         """, unsafe_allow_html=True)
@@ -2230,7 +2234,7 @@ def page_home():
     with col1:
         st.markdown("""
             <div class="feature-card">
-                <div class="feature-icon-box">🔒</div>
+                <div class="feature-icon-box">[Secure]</div>
                 <h4 class="feature-card-title">Secure & Private</h4>
                 <p class="feature-card-description">
                     Data remains on your local machine. No cloud upload required. 
@@ -2242,7 +2246,7 @@ def page_home():
     with col2:
         st.markdown("""
             <div class="feature-card">
-                <div class="feature-icon-box">⚡</div>
+                <div class="feature-icon-box">[Fast]</div>
                 <h4 class="feature-card-title">Fast Processing</h4>
                 <p class="feature-card-description">
                     Batch downloads with intelligent caching. Process multiple subjects 
@@ -2254,7 +2258,7 @@ def page_home():
     with col3:
         st.markdown("""
             <div class="feature-card">
-                <div class="feature-icon-box">📊</div>
+                <div class="feature-icon-box">[QC]</div>
                 <h4 class="feature-card-title">Clinical Ready</h4>
                 <p class="feature-card-description">
                     Scan-level QC with Pennsieve sync. Validated for TBI and epilepsy 
