@@ -5015,7 +5015,10 @@ def page_viewer():
                             
                             # Load button
                             if st.button("Load in Viewer →", use_container_width=True, type="primary"):
+                                # Store both the file path and dataset info for DANDI handling
                                 st.session_state.viewer_selected_file = selected_scan['file_path']
+                                st.session_state.viewer_dataset_id = selected_dataset_id
+                                st.session_state.viewer_dataset_platform = selected_dataset.get('platform')
                                 st.session_state.viewer_file_loaded = True
                                 st.rerun()
     
@@ -5026,15 +5029,66 @@ def page_viewer():
         file_path = st.session_state.get('viewer_selected_file', '')
         file_loaded = 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded
         
+        # Handle DANDI files specially (need to download temporarily)
+        local_file_path = file_path
+        is_dandi = st.session_state.get('viewer_dataset_platform') == 'dandi'
+        
+        if file_loaded and file_path:
+            if is_dandi and not os.path.exists(file_path):
+                # DANDI file - need to download temporarily
+                st.markdown(f"**File:** {Path(file_path).name}")
+                st.caption(f"Platform: DANDI (streaming)")
+                
+                # Get dataset info
+                dataset_id = st.session_state.get('viewer_dataset_id')
+                dataset = st.session_state.db.get_dataset(dataset_id)
+                dandiset_id = dataset['dataset_id_external']
+                
+                # Create temp directory
+                temp_dir = Path('data/temp_viewer')
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                local_file_path = temp_dir / Path(file_path).name
+                
+                # Check if already downloaded
+                if not local_file_path.exists():
+                    with st.spinner(f"Downloading from DANDI... (this may take a moment for large files)"):
+                        # Get agent
+                        agent = st.session_state.agent_factory.get_agent(
+                            platform='dandi',
+                            dataset_id=dataset_id
+                        )
+                        
+                        # Download file
+                        success = agent.download_file(
+                            dandiset_id=dandiset_id,
+                            asset_path=file_path,
+                            local_path=str(local_file_path)
+                        )
+                        
+                        if not success:
+                            st.error("Failed to download file from DANDI")
+                            st.session_state.viewer_file_loaded = False
+                            local_file_path = None
+                        else:
+                            st.success("File downloaded successfully!")
+                else:
+                    st.info("Using cached file")
+            
+            elif not os.path.exists(file_path):
+                st.error(f"File not found: {file_path}")
+                st.session_state.viewer_file_loaded = False
+                local_file_path = None
+        
         # Display file info or empty state
-        if file_loaded and file_path and os.path.exists(file_path):
-            st.markdown(f"**File:** {Path(file_path).name}")
-            st.caption(f"Path: {file_path}")
+        if file_loaded and local_file_path and os.path.exists(local_file_path):
+            if not is_dandi:
+                st.markdown(f"**File:** {Path(local_file_path).name}")
+                st.caption(f"Path: {local_file_path}")
             
             # Get file info using nibabel
             import nibabel as nib
             try:
-                nifti_img = nib.load(file_path)
+                nifti_img = nib.load(str(local_file_path))
                 img_data = nifti_img.get_fdata()
                 
                 col_info1, col_info2, col_info3 = st.columns(3)
@@ -5048,7 +5102,8 @@ def page_viewer():
             except Exception as e:
                 st.error(f"Failed to load file info: {str(e)}")
         else:
-            st.info("No file loaded. Select a NIfTI file from the browser on the left.")
+            if not file_loaded:
+                st.info("No file loaded. Select a NIfTI file from the browser on the left.")
         
         st.markdown("---")
         
@@ -5057,13 +5112,13 @@ def page_viewer():
         import base64
         
         # Prepare file data for niivue
-        if file_loaded and file_path and os.path.exists(file_path):
+        if file_loaded and local_file_path and os.path.exists(local_file_path):
             # Read file and convert to base64 for embedding
-            with open(file_path, 'rb') as f:
+            with open(local_file_path, 'rb') as f:
                 file_bytes = f.read()
                 file_b64 = base64.b64encode(file_bytes).decode()
             
-            file_name = Path(file_path).name
+            file_name = Path(local_file_path).name
             
             # niivue HTML with file loaded
             niivue_html = f"""

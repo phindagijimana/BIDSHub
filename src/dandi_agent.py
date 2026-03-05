@@ -435,6 +435,67 @@ class DANDIAgent(BasePlatformAgent):
         except Exception as e:
             logger.error(f"Error getting DANDI file URL: {e}")
             return None
+    
+    def download_file(self, dandiset_id: str, asset_path: str, 
+                      local_path: str, version: str = "draft",
+                      progress_callback: Optional[Callable] = None) -> bool:
+        """
+        Download a DANDI file to local storage.
+        
+        Args:
+            dandiset_id: Dandiset identifier
+            asset_path: Path to the asset within dandiset
+            local_path: Local destination path
+            version: Version ('draft' or specific version)
+            progress_callback: Optional callback for progress updates (bytes_downloaded, total_bytes)
+            
+        Returns:
+            bool: True if download successful
+        """
+        if not self.client:
+            if not self.verify_connection():
+                return False
+        
+        try:
+            import requests
+            from pathlib import Path
+            
+            dandiset = self.client.get_dandiset(dandiset_id, version)
+            
+            # Find asset by path
+            for asset in dandiset.get_assets():
+                if asset.path == asset_path:
+                    # Get download URL
+                    download_url = asset.get_content_url()
+                    
+                    # Create parent directory if needed
+                    Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Download with progress tracking
+                    response = requests.get(download_url, stream=True)
+                    response.raise_for_status()
+                    
+                    total_size = int(response.headers.get('content-length', 0))
+                    bytes_downloaded = 0
+                    
+                    with open(local_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                bytes_downloaded += len(chunk)
+                                
+                                if progress_callback:
+                                    progress_callback(bytes_downloaded, total_size)
+                    
+                    logger.info(f"Downloaded {asset_path} to {local_path}")
+                    return True
+            
+            logger.warning(f"Asset not found: {asset_path}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error downloading DANDI file: {e}")
+            return False
 
 
 def check_dandi_connection(api_token: Optional[str] = None) -> bool:
