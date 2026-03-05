@@ -128,7 +128,21 @@ open http://localhost:8501
 - Creates database
 - Opens Manage Datasets page
 
-**To add your first dataset**:
+**Testing with Sample Datasets** (No setup required):
+
+BIDSHub includes 2 pre-configured OpenNeuro datasets for testing:
+```bash
+# Add sample datasets to database
+python scripts/add_sample_datasets.py add
+```
+
+Sample datasets available:
+- **ds005115** - Minimal MRI (1 subject) for quick feature testing
+- **ds000228** - Test-retest fMRI for workflow testing
+
+**No credentials needed!** Just navigate to "Manage Datasets", select a sample dataset, and click "Sync" to start exploring.
+
+**To add your own dataset**:
 
 **Cloud Dataset** (OpenNeuro, Pennsieve, XNAT, DANDI):
 1. Choose platform
