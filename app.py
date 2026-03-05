@@ -5065,7 +5065,7 @@ def page_viewer():
                     // Load NIfTI from base64
                     const fileData = base64ToArrayBuffer('{file_b64}');
                     const volumeList = [{{
-                        name: '{file_name}',
+                        url: '{file_name}',
                         buffer: fileData,
                         colormap: 'gray'
                     }}];
