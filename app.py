@@ -4990,38 +4990,37 @@ def page_viewer():
     with col_viewer:
         st.markdown("### Viewer")
         
+        # Always show the viewer interface
+        # Import libraries upfront
+        import nibabel as nib
+        import plotly.graph_objects as go
+        import numpy as np
+        
         # Check if file is loaded
-        if 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded:
-            file_path = st.session_state.get('viewer_selected_file', '')
-            
-            if not file_path:
-                st.info("Select a file from the file browser and click 'Load in Viewer'")
-                return
-            
-            # Check if file exists locally
-            if not os.path.exists(file_path):
-                st.error(f"File not found: {file_path}")
-                st.caption("The file may have been moved or deleted.")
-                return
-            
-            # Display file info
+        file_path = st.session_state.get('viewer_selected_file', '')
+        file_loaded = 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded
+        
+        # Display file info or empty state
+        if file_loaded and file_path and os.path.exists(file_path):
             st.markdown(f"**File:** {Path(file_path).name}")
             st.caption(f"Path: {file_path}")
-            
-            st.markdown("---")
-            
-            # Load and display NIfTI using plotly
+        else:
+            st.info("No file loaded. Select a NIfTI file from the browser on the left.")
+        
+        st.markdown("---")
+        
+        # Always render the viewer tabs
+        tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
+        
+        # Try to load and display the image if a file is selected
+        if file_loaded and file_path and os.path.exists(file_path):
             try:
-                import nibabel as nib
-                import plotly.graph_objects as go
-                import numpy as np
-                
                 with st.spinner("Loading NIfTI image..."):
                     nifti_img = nib.load(file_path)
                     img_data = nifti_img.get_fdata()
                     
                     # Display image info
-                    st.success(f"Loaded: {Path(file_path).name}")
+                    st.success(f"Loaded successfully")
                     
                     col_info1, col_info2, col_info3 = st.columns(3)
                     with col_info1:
@@ -5034,14 +5033,11 @@ def page_viewer():
                     
                     st.markdown("---")
                     
-                    # View selector tabs
-                    tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
-                    
+                    # Render actual views in tabs
                     with tab_axial:
                         st.markdown("**Axial View** - Looking down from the top")
                         slice_z = st.slider("Slice", 0, img_data.shape[2]-1, img_data.shape[2]//2, key="axial_slice")
                         
-                        # Create plotly figure
                         fig = go.Figure(data=go.Heatmap(
                             z=np.rot90(img_data[:, :, slice_z]),
                             colorscale='gray',
@@ -5092,15 +5088,25 @@ def page_viewer():
             except Exception as e:
                 st.error(f"Failed to load NIfTI image: {str(e)}")
                 st.caption("Make sure the file is a valid NIfTI format (.nii or .nii.gz)")
+                
+                # Show empty placeholder in tabs
+                with tab_axial:
+                    st.info("Select a valid NIfTI file to view")
+                with tab_sagittal:
+                    st.info("Select a valid NIfTI file to view")
+                with tab_coronal:
+                    st.info("Select a valid NIfTI file to view")
         else:
-            st.info("Select a scan from the file browser on the left and click 'Load in Viewer'")
-            st.markdown("---")
-            st.markdown("**Instructions:**")
-            st.markdown("1. Select a dataset from the dropdown")
-            st.markdown("2. Choose a subject")
-            st.markdown("3. Pick a session")
-            st.markdown("4. Select a NIfTI scan to visualize")
-            st.markdown("5. Click 'Load in Viewer' to display")
+            # Empty state - show placeholder in all tabs
+            with tab_axial:
+                st.info("Select a NIfTI file from the browser to visualize")
+                st.caption("The axial view will appear here once you load a file")
+            with tab_sagittal:
+                st.info("Select a NIfTI file from the browser to visualize")
+                st.caption("The sagittal view will appear here once you load a file")
+            with tab_coronal:
+                st.info("Select a NIfTI file from the browser to visualize")
+                st.caption("The coronal view will appear here once you load a file")
 
 
 def page_transfer():
