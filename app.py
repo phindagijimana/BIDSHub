@@ -2036,119 +2036,268 @@ def page_manage_datasets():
 
 
 def page_home():
-    """Landing page for BIDSHub (v3.1.2+)."""
+    """Landing page for BIDSHub (v3.1.2+) - Inspired by modern neuroimaging platforms."""
     st.markdown("""
         <style>
-        .landing-container {
-            max-width: 800px;
+        /* Gradient background */
+        .stApp {
+            background: linear-gradient(135deg, #e6f0f9 0%, #ffffff 50%, #e6f0f9 100%);
+        }
+        
+        /* Hero section container */
+        .hero-container {
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 40px 20px;
-            text-align: center;
+            padding: 60px 20px 40px;
         }
         
-        .landing-title {
-            color: #002d72;
-            font-size: 48px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            letter-spacing: -1px;
-        }
-        
-        .landing-subtitle {
-            color: #003d7a;
-            font-size: 24px;
-            font-weight: 500;
-            margin-bottom: 30px;
-            line-height: 1.4;
-        }
-        
-        .landing-description {
-            color: #4b5563;
-            font-size: 18px;
-            line-height: 1.6;
-            margin-bottom: 40px;
-        }
-        
-        .features-grid {
+        /* Two-column grid */
+        .hero-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin: 40px 0;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            margin-bottom: 80px;
+        }
+        
+        /* Left column - text content */
+        .hero-text {
             text-align: left;
         }
         
-        .feature-item {
-            background-color: #e6f0f9;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #002d72;
+        .hero-title {
+            color: #111827;
+            font-size: 52px;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            letter-spacing: -1px;
         }
         
-        .feature-title {
+        .hero-title-accent {
             color: #002d72;
-            font-weight: 600;
-            font-size: 16px;
-            margin-bottom: 8px;
         }
         
-        .feature-description {
+        .hero-subtitle {
             color: #4b5563;
-            font-size: 14px;
-            line-height: 1.5;
+            font-size: 19px;
+            line-height: 1.6;
+            margin-bottom: 30px;
         }
         
+        /* Quick features list */
+        .quick-features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 30px 0;
+        }
+        
+        .quick-feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .feature-icon {
+            background-color: #e6f0f9;
+            padding: 8px;
+            border-radius: 8px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .feature-icon-text {
+            color: #002d72;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        .quick-feature-text {
+            color: #374151;
+            font-size: 16px;
+        }
+        
+        /* Right column - visual */
+        .hero-visual {
+            position: relative;
+            padding: 40px;
+        }
+        
+        .visual-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 45, 114, 0.15);
+            padding: 60px 40px;
+            border: 1px solid #e6f0f9;
+            text-align: center;
+            position: relative;
+        }
+        
+        /* Background blur circles */
+        .blur-circle-1 {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            width: 280px;
+            height: 280px;
+            background: #003d7a;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            z-index: -1;
+        }
+        
+        .blur-circle-2 {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 280px;
+            height: 280px;
+            background: #003d7a;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            z-index: -1;
+        }
+        
+        .bidshub-logo {
+            font-size: 120px;
+            font-weight: 800;
+            color: #002d72;
+            margin-bottom: 20px;
+            letter-spacing: -3px;
+        }
+        
+        .visual-caption {
+            color: #6b7280;
+            font-size: 15px;
+            margin-top: 20px;
+        }
+        
+        /* Feature cards grid */
+        .features-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px 60px;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 45, 114, 0.08);
+            border: 1px solid #e6f0f9;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            box-shadow: 0 8px 30px rgba(0, 45, 114, 0.15);
+            transform: translateY(-4px);
+        }
+        
+        .feature-card-icon {
+            background-color: #e6f0f9;
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .feature-card-icon-text {
+            color: #002d72;
+            font-weight: 700;
+            font-size: 20px;
+        }
+        
+        .feature-card-title {
+            color: #111827;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .feature-card-description {
+            color: #4b5563;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        
+        /* CTA button spacing */
         .cta-section {
-            margin-top: 50px;
+            margin-top: 40px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .hero-grid {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+            
+            .hero-title {
+                font-size: 36px;
+            }
+            
+            .features-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .blur-circle-1, .blur-circle-2 {
+                display: none;
+            }
         }
         </style>
         
-        <div class="landing-container">
-            <div class="landing-title">BIDSHub</div>
-            <div class="landing-subtitle">
-                Multi-platform neuroimaging dataset management<br>
-                and exploration tool
-            </div>
-            
-            <div class="landing-description">
-                Browse, filter, and download BIDS datasets from multiple platforms 
-                simultaneously. Cross-platform metadata filtering, unified QC workflows, 
-                and MRI viewing - all from your desktop.
-            </div>
-            
-            <div class="features-grid">
-                <div class="feature-item">
-                    <div class="feature-title">7 Supported Platforms</div>
-                    <div class="feature-description">
-                        Connect to Pennsieve, OpenNeuro, DANDI, XNAT, HPC, 
-                        Remote Server, and Local datasets
+        <div class="hero-container">
+            <div class="hero-grid">
+                <!-- Left Column: Text Content -->
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        Multi-Platform<br>
+                        <span class="hero-title-accent">Neuroimaging Hub</span>
+                    </h1>
+                    
+                    <p class="hero-subtitle">
+                        Advanced platform for browsing, filtering, and downloading BIDS datasets 
+                        from multiple neuroimaging platforms. Unified metadata filtering, 
+                        quality control workflows, and MRI viewing - all from your desktop.
+                    </p>
+                    
+                    <div class="quick-features">
+                        <div class="quick-feature-item">
+                            <div class="feature-icon">
+                                <span class="feature-icon-text">⚡</span>
+                            </div>
+                            <span class="quick-feature-text">Fast cross-platform dataset browsing</span>
+                        </div>
+                        
+                        <div class="quick-feature-item">
+                            <div class="feature-icon">
+                                <span class="feature-icon-text">📊</span>
+                            </div>
+                            <span class="quick-feature-text">Precise metadata filtering across platforms</span>
+                        </div>
+                        
+                        <div class="quick-feature-item">
+                            <div class="feature-icon">
+                                <span class="feature-icon-text">✓</span>
+                            </div>
+                            <span class="quick-feature-text">Clinical-grade BIDS validation</span>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="feature-item">
-                    <div class="feature-title">Cross-Platform Filtering</div>
-                    <div class="feature-description">
-                        Filter by age, sex, diagnosis, keywords, and modalities 
-                        across all your datasets
-                    </div>
-                </div>
-                
-                <div class="feature-item">
-                    <div class="feature-title">Built-in MRI Viewer</div>
-                    <div class="feature-description">
-                        View NIfTI files directly in the app without downloading
-                    </div>
-                </div>
-                
-                <div class="feature-item">
-                    <div class="feature-title">Quality Control</div>
-                    <div class="feature-description">
-                        Scan-level QC with Pennsieve sync support and 
-                        automated validation
-                    </div>
-                </div>
-            </div>
-            
-            <div class="cta-section">
+                    
+                    <div class="cta-section">
         """, unsafe_allow_html=True)
     
     # Check if user has datasets
@@ -2157,16 +2306,70 @@ def page_home():
         datasets = st.session_state.db.get_all_datasets(status='active')
     
     # Show appropriate button
-    if datasets and len(datasets) > 0:
-        if st.button("Go to Dashboard", type="primary", use_container_width=True, key="goto_dashboard"):
-            st.session_state.current_page = 'dashboard'
-            st.rerun()
-    else:
-        if st.button("Getting Started", type="primary", use_container_width=True, key="getting_started"):
-            st.session_state.current_page = 'dashboard'
-            st.rerun()
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if datasets and len(datasets) > 0:
+            if st.button("Go to Dashboard →", type="primary", use_container_width=True, key="goto_dashboard"):
+                st.session_state.current_page = 'dashboard'
+                st.rerun()
+        else:
+            if st.button("Getting Started →", type="primary", use_container_width=True, key="getting_started"):
+                st.session_state.current_page = 'dashboard'
+                st.rerun()
     
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("""
+                    </div>
+                </div>
+                
+                <!-- Right Column: Visual -->
+                <div class="hero-visual">
+                    <div class="blur-circle-1"></div>
+                    <div class="blur-circle-2"></div>
+                    
+                    <div class="visual-card">
+                        <div class="bidshub-logo">[B]</div>
+                        <div class="visual-caption">Unified BIDS Dataset Management</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Feature Cards Section -->
+        <div class="features-cards">
+            <div class="feature-card">
+                <div class="feature-card-icon">
+                    <span class="feature-card-icon-text">🔒</span>
+                </div>
+                <h4 class="feature-card-title">Local & Secure</h4>
+                <p class="feature-card-description">
+                    All data processing happens on your machine. No cloud uploads required. 
+                    Full control over your neuroimaging data privacy.
+                </p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-card-icon">
+                    <span class="feature-card-icon-text">⚡</span>
+                </div>
+                <h4 class="feature-card-title">Fast Processing</h4>
+                <p class="feature-card-description">
+                    Optimized batch downloads, metadata caching, and SSH connection pooling 
+                    for maximum performance.
+                </p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-card-icon">
+                    <span class="feature-card-icon-text">🌐</span>
+                </div>
+                <h4 class="feature-card-title">7 Platforms</h4>
+                <p class="feature-card-description">
+                    Connect to Pennsieve, OpenNeuro, DANDI, XNAT, HPC clusters, 
+                    remote servers, and local datasets.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def page_dashboard():
