@@ -2106,11 +2106,15 @@ def page_home():
         }
         
         .bidshub-logo {
-            font-size: 6rem;
-            font-weight: 900;
-            color: #002d72;
-            margin: 2rem 0;
-            text-shadow: 0 4px 12px rgba(0, 45, 114, 0.15);
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #ffffff;
+            background-color: #002d72;
+            margin: 2rem auto;
+            padding: 2rem 3rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 45, 114, 0.25);
+            display: inline-block;
         }
         
         .logo-subtitle {
@@ -2201,7 +2205,7 @@ def page_home():
     with col2:
         st.markdown("""
             <div class="visual-card">
-                <div class="bidshub-logo">[B]</div>
+                <div class="bidshub-logo">BIDSHub</div>
                 <p class="logo-subtitle">BIDSHub Platform</p>
             </div>
         """, unsafe_allow_html=True)
