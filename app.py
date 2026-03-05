@@ -4912,7 +4912,6 @@ def page_viewer():
                 
                 if not subjects:
                     st.info("No subjects indexed. Click 'Sync' in Manage Datasets or switch to 'From File System' mode.")
-                    return
                 
                 # Subject selector
                 subject_options = [s['subject_id'] for s in subjects]
@@ -4928,7 +4927,6 @@ def page_viewer():
                     
                     if not sessions:
                         st.info(f"No sessions found for {selected_subject_id}")
-                        return
                     
                     # Session selector
                     session_ids = [s['session_id'] for s in sessions]
@@ -4944,7 +4942,6 @@ def page_viewer():
                         
                         if not scans:
                             st.info(f"No scans found for session {selected_session_id}")
-                            return
                         
                         # Filter only NIfTI files
                         nifti_scans = [
@@ -4954,7 +4951,6 @@ def page_viewer():
                         
                         if not nifti_scans:
                             st.warning("No NIfTI files found in this session")
-                            return
                         
                         # Scan selector with modality info
                         scan_labels = []
