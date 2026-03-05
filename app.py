@@ -4647,6 +4647,9 @@ def page_transfer():
     # WinSCP-Style Dual Pane Interface
     st.markdown('<h2 class="section-header">File Browser</h2>', unsafe_allow_html=True)
     
+    # Create dual-pane layout columns
+    col1, col_arrow, col2 = st.columns([10, 1, 10])
+    
     # LEFT PANE: Source Browser
     with col1:
         st.markdown("### Source Platform")
