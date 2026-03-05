@@ -224,6 +224,22 @@ def apply_custom_theme():
             color: #111827;
         }
         
+        /* Force sidebar to always be visible and prevent collapsing */
+        section[data-testid="stSidebar"] {
+            display: block !important;
+            visibility: visible !important;
+        }
+        
+        /* Hide the collapse button to prevent accidental hiding */
+        button[kind="header"][data-testid="baseButton-header"] {
+            display: none !important;
+        }
+        
+        /* Alternative: hide collapse button by aria-label */
+        button[aria-label*="collapse"] {
+            display: none !important;
+        }
+        
         /* Success/Info/Warning/Error boxes */
         .stSuccess {
             background-color: rgba(16, 185, 129, 0.1);
