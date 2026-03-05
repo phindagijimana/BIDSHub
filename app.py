@@ -5035,8 +5035,18 @@ def page_viewer():
             <html>
             <head>
                 <style>
-                    body {{ margin: 0; padding: 0; }}
-                    #canvas {{ width: 100%; height: 600px; }}
+                    html, body {{ 
+                        margin: 0; 
+                        padding: 0; 
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                    }}
+                    #canvas {{ 
+                        width: 100vw; 
+                        height: 700px;
+                        display: block;
+                    }}
                 </style>
             </head>
             <body>
@@ -5053,11 +5063,13 @@ def page_viewer():
                         return bytes.buffer;
                     }}
                     
-                    // Initialize niivue
+                    // Initialize niivue with better defaults
                     const nv = new niivue.Niivue({{
                         show3Dcrosshair: true,
-                        backColor: [0.95, 0.95, 0.95, 1],
-                        crosshairColor: [1, 0, 0, 1]
+                        backColor: [0, 0, 0, 1],
+                        crosshairColor: [1, 0, 0, 1],
+                        textHeight: 0.05,
+                        colorbarHeight: 0.05
                     }});
                     
                     nv.attachToCanvas(document.getElementById('canvas'));
@@ -5076,6 +5088,12 @@ def page_viewer():
                     nv.loadVolumes(volumeList).then(() => {{
                         nv.setSliceType(nv.sliceTypeMultiplanar);
                         nv.setClipPlane([0, 0, 90]);
+                        
+                        // Ensure canvas fills and renders properly
+                        setTimeout(() => {{
+                            nv.drawScene();
+                        }}, 100);
+                        
                         console.log('NIfTI loaded successfully');
                         URL.revokeObjectURL(blobUrl);
                     }}).catch(err => {{
@@ -5146,7 +5164,7 @@ def page_viewer():
             """
         
         # Render niivue viewer
-        components.html(niivue_html, height=650, scrolling=False)
+        components.html(niivue_html, height=720, scrolling=False)
 
 
 def page_transfer():
