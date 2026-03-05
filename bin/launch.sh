@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Data Explorer Launch Script
+# BIDSHub Launch Script
 # Automatically finds available port between 8500-8550
 #
 
@@ -54,7 +54,7 @@ find_available_port() {
 
 # Header
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}           Data Explorer Launch Script${NC}"
+echo -e "${BLUE}           BIDSHub Launch Script${NC}"
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -95,7 +95,7 @@ echo ""
 
 # Launch Streamlit
 echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
-echo -e "${GREEN}Launching Data Explorer on port ${PORT}...${NC}"
+echo -e "${GREEN}Launching BIDSHub on port ${PORT}...${NC}"
 echo -e "${BLUE}────────────────────────────────────────────────────────${NC}"
 echo ""
 echo -e "  Local URL:   ${GREEN}http://localhost:${PORT}${NC}"

@@ -1,5 +1,5 @@
 """
-Migration script: Single dataset → Multi-dataset schema
+Migration script: Single dataset -> Multi-dataset schema
 
 This script migrates existing database from single dataset (v1.0) to multi-dataset (v1.5)
 - Adds datasets table
@@ -37,7 +37,7 @@ def migrate_database(db_path='data/tracktbi.db'):
         bool: True if successful, False otherwise
     """
     print("=" * 60)
-    print("Data Explorer - Multi-Dataset Migration")
+    print("BIDSHub - Multi-Dataset Migration")
     print("=" * 60)
     
     # Create backup

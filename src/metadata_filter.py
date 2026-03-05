@@ -5,26 +5,33 @@ Filter subjects and scans by participant metadata (age, sex, diagnosis, etc.)
 and scan properties (modality, session, acquisition parameters).
 
 v1.5+: Supports multi-dataset filtering across multiple BIDS datasets.
+v3.0+: Added keyword and modality filtering for sparse metadata datasets.
 """
 
 import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Optional
+import re
 
 
 class MetadataFilter:
-    """Filter subjects and scans based on metadata criteria (v1.5+ supports multi-dataset)."""
+    """
+    Filter subjects and scans based on metadata criteria (v1.5+ supports multi-dataset).
+    v3.0+: Extended with keyword and modality filtering for sparse metadata datasets.
+    """
     
-    def __init__(self, bids_root: str = None, datasets: List[Dict] = None):
+    def __init__(self, bids_root: str = None, datasets: List[Dict] = None, database=None):
         """
         Initialize metadata filter for single or multiple BIDS datasets.
         
         Args:
             bids_root: Path to BIDS dataset root directory (single dataset, legacy)
             datasets: List of dataset dicts with id, name, root_path (v1.5+ multi-dataset)
+            database: Optional Database instance for keyword/modality filtering (v3.0+)
         """
         self.bids_root = Path(bids_root) if bids_root else None
         self.datasets = datasets or []
+        self.database = database
         
         # For single dataset (backwards compatibility)
         if bids_root and not datasets:
@@ -278,6 +285,233 @@ class MetadataFilter:
             summary['demographics']['diagnosis'] = dx_counts
         
         return summary
+    
+    def get_field_coverage(self, field_name: str) -> Dict:
+        """
+        Get metadata coverage statistics for a field across all datasets.
+        
+        Args:
+            field_name: Name of field (e.g., 'age', 'sex', 'diagnosis')
+        
+        Returns:
+            Dict with coverage info: {
+                'overall_coverage': 0.75,  # 75% of subjects have this field
+                'datasets': {
+                    1: {'coverage': 0.90, 'count': 45, 'total': 50},
+                    2: {'coverage': 0.0, 'count': 0, 'total': 30}
+                }
+            }
+        """
+        if not self.participants_dfs:
+            return {'overall_coverage': 0.0, 'datasets': {}}
+        
+        total_subjects = 0
+        subjects_with_field = 0
+        dataset_coverage = {}
+        
+        for dataset_id, df in self.participants_dfs.items():
+            ds_total = len(df)
+            ds_with_field = 0
+            
+            if field_name in df.columns:
+                ds_with_field = df[field_name].notna().sum()
+            
+            total_subjects += ds_total
+            subjects_with_field += ds_with_field
+            
+            dataset_coverage[dataset_id] = {
+                'coverage': ds_with_field / ds_total if ds_total > 0 else 0.0,
+                'count': ds_with_field,
+                'total': ds_total
+            }
+        
+        overall_coverage = subjects_with_field / total_subjects if total_subjects > 0 else 0.0
+        
+        return {
+            'overall_coverage': overall_coverage,
+            'datasets': dataset_coverage
+        }
+    
+    def get_sparse_fields_warning(self, criteria: Dict, threshold: float = 0.5) -> List[str]:
+        """
+        Check which filter fields have low metadata coverage.
+        
+        Args:
+            criteria: Filter criteria being applied
+            threshold: Coverage threshold below which to warn (default 0.5 = 50%)
+        
+        Returns:
+            List of warning messages for sparse fields
+        """
+        warnings = []
+        
+        for field_name in criteria.keys():
+            coverage_info = self.get_field_coverage(field_name)
+            overall = coverage_info['overall_coverage']
+            
+            if overall < threshold:
+                # Count datasets with low coverage
+                low_coverage_datasets = [
+                    ds_id for ds_id, info in coverage_info['datasets'].items()
+                    if info['coverage'] < threshold
+                ]
+                
+                warning = f"Field '{field_name}' has {overall*100:.0f}% coverage across datasets"
+                if len(low_coverage_datasets) > 0:
+                    warning += f" (low in {len(low_coverage_datasets)} dataset(s))"
+                
+                warnings.append(warning)
+        
+        return warnings
+    
+    def filter_by_keywords(self, keywords: List[str], dataset_ids: List[int] = None) -> List[Dict]:
+        """
+        Filter subjects by keyword search (v3.0+).
+        Searches dataset descriptions, README, subject IDs, and scan filenames.
+        
+        Args:
+            keywords: List of keywords to search (e.g., ['epilepsy', 'TBI', 'hippocampal sclerosis'])
+            dataset_ids: Optional list of dataset IDs to search within
+        
+        Returns:
+            List of subject dicts with {subject_id, dataset_id, dataset_name, match_reason}
+        """
+        if not self.database or not keywords:
+            return []
+        
+        results = []
+        matched_subject_ids = set()
+        
+        # Normalize keywords (lowercase, remove special chars)
+        normalized_keywords = [kw.lower().strip() for kw in keywords]
+        
+        # Get target datasets
+        if dataset_ids:
+            datasets = [d for d in self.datasets if d['id'] in dataset_ids]
+        else:
+            datasets = self.datasets
+        
+        for dataset in datasets:
+            dataset_id = dataset['id']
+            dataset_name = dataset['name']
+            
+            # 1. Search dataset name and description
+            dataset_text = f"{dataset_name} {dataset.get('description', '')}".lower()
+            dataset_matches_keyword = any(kw in dataset_text for kw in normalized_keywords)
+            
+            if dataset_matches_keyword:
+                # If dataset matches, include all its subjects
+                subjects = self.database.get_all_subjects(filters={'dataset_id': dataset_id})
+                for subject in subjects:
+                    subj_key = (subject['subject_id'], dataset_id)
+                    if subj_key not in matched_subject_ids:
+                        matched_subject_ids.add(subj_key)
+                        results.append({
+                            'subject_id': subject['subject_id'],
+                            'dataset_id': dataset_id,
+                            'dataset_name': dataset_name,
+                            'match_reason': 'dataset description'
+                        })
+            else:
+                # Search within subjects and scans
+                subjects = self.database.get_all_subjects(filters={'dataset_id': dataset_id})
+                
+                for subject in subjects:
+                    subject_id = subject['subject_id']
+                    subj_key = (subject_id, dataset_id)
+                    
+                    if subj_key in matched_subject_ids:
+                        continue
+                    
+                    # 2. Search subject ID
+                    if any(kw in subject_id.lower() for kw in normalized_keywords):
+                        matched_subject_ids.add(subj_key)
+                        results.append({
+                            'subject_id': subject_id,
+                            'dataset_id': dataset_id,
+                            'dataset_name': dataset_name,
+                            'match_reason': 'subject ID'
+                        })
+                        continue
+                    
+                    # 3. Search scan filenames and suffixes
+                    scans = self.database.get_subject_scans(subject_id)
+                    scan_text = ' '.join([
+                        scan.get('file_path', '') + ' ' + scan.get('suffix', '')
+                        for scan in scans
+                    ]).lower()
+                    
+                    if any(kw in scan_text for kw in normalized_keywords):
+                        matched_subject_ids.add(subj_key)
+                        results.append({
+                            'subject_id': subject_id,
+                            'dataset_id': dataset_id,
+                            'dataset_name': dataset_name,
+                            'match_reason': 'scan filenames'
+                        })
+        
+        return results
+    
+    def filter_by_modalities(self, modalities: List[str], dataset_ids: List[int] = None) -> List[Dict]:
+        """
+        Filter subjects by MRI modality types (v3.0+).
+        
+        Args:
+            modalities: List of modality types (e.g., ['T1w', 'T2w', 'FLAIR', 'DWI', 'ASL'])
+            dataset_ids: Optional list of dataset IDs to search within
+        
+        Returns:
+            List of subject dicts with {subject_id, dataset_id, dataset_name, available_modalities}
+        """
+        if not self.database or not modalities:
+            return []
+        
+        results = []
+        
+        # Normalize modalities (lowercase)
+        normalized_modalities = [mod.lower().strip() for mod in modalities]
+        
+        # Get target datasets
+        if dataset_ids:
+            datasets = [d for d in self.datasets if d['id'] in dataset_ids]
+        else:
+            datasets = self.datasets
+        
+        for dataset in datasets:
+            dataset_id = dataset['id']
+            dataset_name = dataset['name']
+            
+            subjects = self.database.get_all_subjects(filters={'dataset_id': dataset_id})
+            
+            for subject in subjects:
+                subject_id = subject['subject_id']
+                
+                # Get all scans for this subject
+                scans = self.database.get_subject_scans(subject_id)
+                
+                # Extract modalities and suffixes from scans
+                subject_modalities = set()
+                for scan in scans:
+                    # Get modality folder (anat, func, dwi, etc.)
+                    modality = scan.get('modality', '').lower()
+                    subject_modalities.add(modality)
+                    
+                    # Get suffix (T1w, T2w, FLAIR, etc.)
+                    suffix = scan.get('suffix', '').lower()
+                    subject_modalities.add(suffix)
+                
+                # Check if subject has any requested modalities
+                has_match = any(mod in ' '.join(subject_modalities) for mod in normalized_modalities)
+                
+                if has_match:
+                    results.append({
+                        'subject_id': subject_id,
+                        'dataset_id': dataset_id,
+                        'dataset_name': dataset_name,
+                        'available_modalities': list(subject_modalities)
+                    })
+        
+        return results
     
     def export_filtered_list(self, criteria: Dict, output_path: str) -> bool:
         """

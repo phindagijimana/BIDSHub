@@ -1,5 +1,5 @@
 """
-UI Theme for Data Explorer.
+UI Theme for BIDSHub.
 
 Chase Bank-inspired professional navy blue and white theme.
 """
@@ -379,14 +379,14 @@ def show_loading(message: str = "Loading..."):
 # Test theme if run directly
 if __name__ == "__main__":
     st.set_page_config(
-        page_title="Data Explorer - Theme Test",
+        page_title="BIDSHub - Theme Test",
         page_icon="🔬",
         layout="wide"
     )
     
     apply_custom_theme()
     
-    st.markdown('<h1 class="main-header">Data Explorer - Theme Test</h1>', 
+    st.markdown('<h1 class="main-header">BIDSHub - Theme Test</h1>', 
                 unsafe_allow_html=True)
     
     st.markdown('<h2 class="section-header">Metrics</h2>', 

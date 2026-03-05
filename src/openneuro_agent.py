@@ -1,5 +1,5 @@
 """
-OpenNeuro Integration for Data Explorer.
+OpenNeuro Integration for BIDSHub.
 
 Provides interface to download public BIDS datasets from OpenNeuro.
 OpenNeuro is a free and open platform for sharing neuroimaging data.
@@ -9,6 +9,10 @@ import openneuro as on
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
 import shutil
+import logging
+import json
+
+logger = logging.getLogger(__name__)
 
 
 class OpenNeuroAgent:
@@ -32,6 +36,21 @@ class OpenNeuroAgent:
             raise RuntimeError(
                 "OpenNeuro library not found. Install with: pip install openneuro-py"
             )
+    
+    def verify_connection(self) -> bool:
+        """
+        Verify OpenNeuro is accessible (v3.1.1+).
+        
+        Returns:
+            bool: True if can connect to OpenNeuro
+        """
+        try:
+            import requests
+            response = requests.get('https://openneuro.org/api', timeout=5)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"OpenNeuro connection check failed: {e}")
+            return False
     
     def download_dataset(self,
                         dataset_id: str,
@@ -79,13 +98,13 @@ class OpenNeuroAgent:
             on.download(**kwargs)
             
             if progress_callback:
-                progress_callback("✓ Download complete")
+                progress_callback("Download complete")
             
             return True
             
         except Exception as e:
             if progress_callback:
-                progress_callback(f"✗ Download failed: {e}")
+                progress_callback(f"Download failed: {e}")
             print(f"OpenNeuro download error: {e}")
             return False
     
@@ -311,6 +330,217 @@ class OpenNeuroAgent:
             print(f"Error getting OpenNeuro structure: {e}")
             return {'subjects': [], 'sessions': {}, 'metadata': None}
     
+    def get_subjects_with_metadata(self, dataset_id: str, use_cache: bool = True) -> List[Dict]:
+        """
+        Fetch subject list with metadata and scans from OpenNeuro.
+        
+        Args:
+            dataset_id: OpenNeuro dataset ID (e.g., 'ds000246')
+            
+        Returns:
+            list: List of dicts with subject info, metadata, and scans
+                [{
+                    'subject_id': 'sub-001',
+                    'age': 25.5,
+                    'sex': 'F',
+                    'diagnosis': 'TBI',
+                    'has_anat': True,
+                    'has_func': False,
+                    'sessions': ['ses-01'],
+                    'scans': [{'file_path': '...', 'modality': '...', 'suffix': '...', 'session': '...'}, ...],
+                    'metadata': {...}  # Raw metadata from participants.tsv
+                }, ...]
+        """
+        try:
+            import requests
+            import csv
+            from io import StringIO
+            from collections import defaultdict
+            
+            # Get dataset structure first
+            structure = self.get_remote_dataset_structure(dataset_id)
+            subjects_list = structure.get('subjects', [])
+            sessions_dict = structure.get('sessions', {})
+            
+            if not subjects_list:
+                logger.warning(f"No subjects found in dataset {dataset_id}")
+                return []
+            
+            # Try to fetch participants.tsv for metadata
+            participants_url = f"https://openneuro.org/crn/datasets/{dataset_id}/files/participants.tsv"
+            
+            try:
+                response = requests.get(participants_url, timeout=30)
+                
+                if response.status_code == 200:
+                    # Parse TSV
+                    tsv_data = response.text
+                    csv_reader = csv.DictReader(StringIO(tsv_data), delimiter='\t')
+                    
+                    # Build lookup dict from participants.tsv
+                    metadata_lookup = {}
+                    for row in csv_reader:
+                        participant_id = row.get('participant_id', '').replace('sub-', '')
+                        metadata_lookup[participant_id] = row
+                else:
+                    logger.info(f"participants.tsv not available for {dataset_id}")
+                    metadata_lookup = {}
+            
+            except Exception as e:
+                logger.info(f"Could not fetch participants.tsv: {e}")
+                metadata_lookup = {}
+            
+            # Fetch full file list to get scans
+            scans_by_subject = self._get_scans_from_graphql(dataset_id)
+            
+            # Build subject list with metadata
+            result = []
+            for subject_id in subjects_list:
+                metadata = metadata_lookup.get(subject_id, {})
+                sessions = sessions_dict.get(subject_id, [])
+                scans = scans_by_subject.get(subject_id, [])
+                
+                # Determine modality presence from scans
+                has_anat = any(s.get('modality') == 'anat' for s in scans)
+                has_func = any(s.get('modality') == 'func' for s in scans)
+                has_dwi = any(s.get('modality') == 'dwi' for s in scans)
+                has_fmap = any(s.get('modality') == 'fmap' for s in scans)
+                
+                # Extract common fields
+                subject_info = {
+                    'subject_id': subject_id if subject_id.startswith('sub-') else f'sub-{subject_id}',
+                    'age': self._parse_numeric(metadata.get('age')),
+                    'sex': metadata.get('sex', '').upper() if metadata.get('sex') else None,
+                    'diagnosis': metadata.get('diagnosis') or metadata.get('group'),
+                    'participant_group': metadata.get('group'),
+                    'handedness': metadata.get('handedness'),
+                    'site': metadata.get('site'),
+                    'sessions': [f'ses-{s}' if not s.startswith('ses-') else s for s in sessions],
+                    'scans': scans,
+                    'has_anat': has_anat,
+                    'has_func': has_func,
+                    'has_dwi': has_dwi,
+                    'has_fmap': has_fmap,
+                    'metadata': metadata  # Store all raw metadata
+                }
+                
+                result.append(subject_info)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching subjects from {dataset_id}: {e}")
+            return []
+    
+    def _get_scans_from_graphql(self, dataset_id: str) -> Dict[str, List[Dict]]:
+        """
+        Get scan files from OpenNeuro GraphQL API.
+        
+        Args:
+            dataset_id: OpenNeuro dataset ID
+            
+        Returns:
+            dict: {subject_id: [scan_dicts]}
+        """
+        try:
+            import requests
+            
+            # OpenNeuro GraphQL API
+            graphql_url = 'https://openneuro.org/crn/graphql'
+            
+            # Query to get dataset file tree
+            query = """
+            query($datasetId: ID!) {
+                dataset(id: $datasetId) {
+                    id
+                    draft {
+                        files {
+                            filename
+                            size
+                        }
+                    }
+                }
+            }
+            """
+            
+            response = requests.post(
+                graphql_url,
+                json={'query': query, 'variables': {'datasetId': dataset_id}},
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to query OpenNeuro GraphQL: {response.status_code}")
+                return {}
+            
+            data = response.json()
+            
+            if 'errors' in data:
+                logger.error(f"GraphQL errors: {data['errors']}")
+                return {}
+            
+            files = data.get('data', {}).get('dataset', {}).get('draft', {}).get('files', [])
+            
+            # Parse files for imaging data
+            scans_by_subject = defaultdict(list)
+            
+            for file_info in files:
+                filename = file_info.get('filename', '')
+                
+                # Only process imaging files (.nii, .nii.gz, .dcm, etc.)
+                if not any(filename.endswith(ext) for ext in ['.nii', '.nii.gz', '.dcm']):
+                    continue
+                
+                # Parse BIDS structure: sub-XX/[ses-XX/]modality/file.nii.gz
+                parts = filename.split('/')
+                
+                if len(parts) < 3 or not parts[0].startswith('sub-'):
+                    continue
+                
+                subject_id = parts[0].replace('sub-', '')
+                
+                # Determine session and modality
+                session = None
+                modality = None
+                file_name = parts[-1]
+                
+                if parts[1].startswith('ses-'):
+                    session = parts[1].replace('ses-', '')
+                    if len(parts) > 2:
+                        modality = parts[2]
+                else:
+                    modality = parts[1]
+                
+                # Extract suffix from filename (e.g., T1w, T2w, FLAIR, bold)
+                suffix = None
+                if '_' in file_name:
+                    name_parts = file_name.replace('.nii.gz', '').replace('.nii', '').split('_')
+                    suffix = name_parts[-1]
+                
+                scan_info = {
+                    'file_path': filename,
+                    'modality': modality,
+                    'suffix': suffix,
+                    'session': session
+                }
+                
+                scans_by_subject[subject_id].append(scan_info)
+            
+            return dict(scans_by_subject)
+            
+        except Exception as e:
+            logger.error(f"Error fetching scans from GraphQL: {e}")
+            return {}
+    
+    def _parse_numeric(self, value) -> Optional[float]:
+        """Parse numeric value safely."""
+        if value is None or value == '' or value == 'n/a':
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+    
     def download_participants_tsv(self, dataset_id: str, target_dir: str) -> bool:
         """
         Download only participants.tsv to get metadata.
@@ -341,6 +571,20 @@ class OpenNeuroAgent:
         import re
         pattern = r'^ds\d{6}$'
         return bool(re.match(pattern, dataset_id))
+    
+    def get_file_url(self, dataset_id: str, file_path: str) -> str:
+        """
+        Get direct download URL for an OpenNeuro file.
+        
+        Args:
+            dataset_id: OpenNeuro dataset ID (e.g., 'ds000246')
+            file_path: Path to file within dataset (e.g., 'sub-01/anat/sub-01_T1w.nii.gz')
+            
+        Returns:
+            str: Direct download URL
+        """
+        # OpenNeuro files are served from S3
+        return f"https://s3.amazonaws.com/openneuro.org/{dataset_id}/{file_path}"
 
 
 # Helper function for checking connectivity

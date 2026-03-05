@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Data Explorer Launch Script
+BIDSHub Launch Script
 Automatically finds available port between 8500-8550 and launches Streamlit
 """
 
@@ -50,7 +50,7 @@ def main():
     os.chdir(project_root)
     
     print("=" * 60)
-    print("           Data Explorer Launch Script")
+    print("           BIDSHub Launch Script")
     print("=" * 60)
     print()
     
@@ -77,7 +77,7 @@ def main():
     
     # Launch Streamlit
     print("-" * 60)
-    print(f"Launching Data Explorer on port {port}...")
+    print(f"Launching BIDSHub on port {port}...")
     print("-" * 60)
     print()
     print(f"  Local URL:   http://localhost:{port}")
@@ -104,8 +104,8 @@ def main():
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print("\n\n[OK] Data Explorer stopped")
-        print("Thank you for using Data Explorer!")
+        print("\n\n[OK] BIDSHub stopped")
+        print("Thank you for using BIDSHub!")
 
 
 if __name__ == "__main__":

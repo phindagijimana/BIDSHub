@@ -1,5 +1,5 @@
 """
-Utility functions for Data Explorer.
+Utility functions for BIDSHub.
 """
 
 import pandas as pd
@@ -255,6 +255,20 @@ def check_disk_space(path: str, required_bytes: int) -> tuple[bool, str]:
         return False, f"Error checking disk space: {e}"
 
 
+def _format_modalities(subject: Dict) -> str:
+    """Format modality flags as compact string."""
+    modalities = []
+    if subject.get('has_anat'):
+        modalities.append('T1/T2')
+    if subject.get('has_func'):
+        modalities.append('fMRI')
+    if subject.get('has_dwi'):
+        modalities.append('DWI')
+    if subject.get('has_fmap'):
+        modalities.append('FMAP')
+    return ', '.join(modalities) if modalities else ''
+
+
 def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
     """
     Create a pandas DataFrame from subjects list for display.
@@ -278,16 +292,20 @@ def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
         # Add Dataset column first if multi-dataset
         if has_dataset_info:
             platform = subject.get('_dataset_platform', '')
-            platform_icon = '🔐' if platform == 'pennsieve' else '🌍'
+            platform_prefix = 'Pennsieve' if platform == 'pennsieve' else 'OpenNeuro'
             dataset_name = subject.get('_dataset_name', 'Unknown')
-            row['Dataset'] = f"{platform_icon} {dataset_name}"
+            row['Dataset'] = f"[{platform_prefix}] {dataset_name}"
         
         # Standard columns
         row.update({
             'Subject ID': subject['subject_id'],
+            'Age': subject.get('age', ''),
+            'Sex': subject.get('sex', ''),
+            'Diagnosis': subject.get('diagnosis', ''),
             'QC Status': subject.get('qc_status', 'pending').title(),
             'Sessions': get_session_labels(subject),
             'Scans': f"{subject.get('scan_count_2wk', 0) + subject.get('scan_count_6mo', 0)}",
+            'Modalities': _format_modalities(subject),
             'Flagged': 'Yes' if subject.get('flagged') else ''
         })
         

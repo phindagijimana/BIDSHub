@@ -1,12 +1,15 @@
 """
-Quality Control Manager for Data Explorer.
+Quality Control Manager for BIDSHub.
 
 Manages QC workflow including status tracking, notes, and history.
+v3.1+: Added CSV export/import for Pennsieve integration.
 """
 
 from typing import List, Dict, Optional
 from datetime import datetime
 from enum import Enum
+import csv
+from pathlib import Path
 
 
 class QCStatus(Enum):
@@ -60,14 +63,17 @@ class QCManager:
         )
     
     def update_scan_qc(self, scan_id: int, qc_status: str,
-                      notes: str = None) -> bool:
+                      notes: str = None, reviewed_by: str = None,
+                      flagged: bool = None) -> bool:
         """
-        Update QC status for a specific scan.
+        Update QC status for a specific scan (v3.1+).
         
         Args:
-            scan_id: Scan ID
+            scan_id: Scan database ID
             qc_status: New QC status
             notes: QC notes
+            reviewed_by: Reviewer identifier
+            flagged: Whether to flag scan
             
         Returns:
             bool: True if successful
@@ -75,12 +81,16 @@ class QCManager:
         # Validate status
         valid_statuses = [s.value for s in QCStatus]
         if qc_status not in valid_statuses:
+            print(f"Invalid QC status: {qc_status}")
             return False
         
-        # This would require a method in database.py
-        # For MVP, we'll focus on subject-level QC
-        # Scan-level QC can be added later
-        return True
+        return self.db.update_scan_qc(
+            scan_id=scan_id,
+            qc_status=qc_status,
+            notes=notes,
+            reviewed_by=reviewed_by,
+            flagged=flagged
+        )
     
     def get_qc_summary(self) -> Dict:
         """
@@ -312,6 +322,221 @@ class QCManager:
         
         return progress
     
+    def export_qc_csv(self, dataset_id: int, output_path: str, 
+                     include_pending: bool = False) -> bool:
+        """
+        Export scan-level QC results to CSV for Pennsieve upload (v3.1+).
+        
+        Args:
+            dataset_id: Dataset ID to export QC for
+            output_path: Path to save CSV file
+            include_pending: Whether to include scans with pending QC status
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Get all scans with QC data for this dataset
+            conn = self.db._get_connection()
+            cursor = conn.cursor()
+            
+            # Query scans with QC info
+            if include_pending:
+                status_filter = ""
+            else:
+                status_filter = "AND qc_status != 'pending'"
+            
+            query = f"""
+                SELECT 
+                    s.id as scan_id,
+                    s.subject_id,
+                    s.session as session_id,
+                    s.modality,
+                    s.suffix,
+                    s.qc_status,
+                    s.qc_notes,
+                    s.reviewed_by,
+                    s.reviewed_date,
+                    s.flagged,
+                    s.file_path
+                FROM scans s
+                WHERE s.dataset_id = ?
+                {status_filter}
+                ORDER BY s.subject_id, s.session, s.modality, s.suffix
+            """
+            
+            cursor.execute(query, (dataset_id,))
+            rows = cursor.fetchall()
+            
+            if not rows:
+                print(f"No QC data to export for dataset {dataset_id}")
+                return False
+            
+            # Write CSV
+            with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = [
+                    'scan_id', 'subject_id', 'session_id', 'modality', 'suffix',
+                    'qc_status', 'qc_notes', 'reviewed_by', 'reviewed_date',
+                    'flagged', 'file_path'
+                ]
+                
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                for row in rows:
+                    row_dict = dict(row)
+                    
+                    # Format boolean as string
+                    row_dict['flagged'] = 'true' if row_dict['flagged'] else 'false'
+                    
+                    # Format date as ISO 8601
+                    if row_dict['reviewed_date']:
+                        if isinstance(row_dict['reviewed_date'], str):
+                            row_dict['reviewed_date'] = row_dict['reviewed_date']
+                        else:
+                            row_dict['reviewed_date'] = row_dict['reviewed_date'].isoformat()
+                    
+                    # Handle None values
+                    for key in row_dict:
+                        if row_dict[key] is None:
+                            row_dict[key] = ''
+                    
+                    writer.writerow(row_dict)
+            
+            conn.close()
+            
+            print(f"[OK] Exported {len(rows)} QC records to {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error exporting QC CSV: {e}")
+            return False
+    
+    def import_qc_csv(self, csv_path: str, dataset_id: int,
+                     merge: bool = True) -> Dict:
+        """
+        Import QC results from CSV (v3.1+).
+        
+        Args:
+            csv_path: Path to CSV file
+            dataset_id: Dataset ID to import for
+            merge: If True, merge with existing QC data (latest timestamp wins)
+                  If False, replace all QC data for dataset
+            
+        Returns:
+            Dict with import statistics: {
+                'imported': 10,
+                'skipped': 2,
+                'errors': 1,
+                'messages': []
+            }
+        """
+        stats = {
+            'imported': 0,
+            'skipped': 0,
+            'errors': 0,
+            'messages': []
+        }
+        
+        try:
+            if not Path(csv_path).exists():
+                stats['messages'].append(f"File not found: {csv_path}")
+                return stats
+            
+            with open(csv_path, 'r', newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                
+                # Validate headers
+                required_fields = ['scan_id', 'subject_id', 'session_id', 'qc_status']
+                if not all(field in reader.fieldnames for field in required_fields):
+                    stats['messages'].append("Invalid CSV format: missing required columns")
+                    return stats
+                
+                for row in reader:
+                    try:
+                        scan_id = int(row['scan_id'])
+                        qc_status = row['qc_status'].strip()
+                        
+                        # Validate status
+                        if not self.validate_qc_status(qc_status):
+                            stats['skipped'] += 1
+                            stats['messages'].append(f"Invalid status for scan {scan_id}: {qc_status}")
+                            continue
+                        
+                        # Check if scan exists in our database
+                        existing_qc = self.db.get_scan_qc(scan_id)
+                        
+                        if not existing_qc:
+                            stats['skipped'] += 1
+                            stats['messages'].append(f"Scan {scan_id} not found in database")
+                            continue
+                        
+                        # Merge logic: if merge=True, check timestamps
+                        if merge and existing_qc.get('reviewed_date'):
+                            # Parse import date
+                            import_date_str = row.get('reviewed_date', '').strip()
+                            if import_date_str:
+                                try:
+                                    import_date = datetime.fromisoformat(import_date_str)
+                                    existing_date = existing_qc['reviewed_date']
+                                    
+                                    if isinstance(existing_date, str):
+                                        existing_date = datetime.fromisoformat(existing_date)
+                                    
+                                    # Skip if existing is newer
+                                    if existing_date >= import_date:
+                                        stats['skipped'] += 1
+                                        continue
+                                except:
+                                    pass
+                        
+                        # Update scan QC
+                        notes = row.get('qc_notes', '').strip() or None
+                        reviewed_by = row.get('reviewed_by', '').strip() or None
+                        flagged = row.get('flagged', '').lower() == 'true'
+                        
+                        success = self.db.update_scan_qc(
+                            scan_id=scan_id,
+                            qc_status=qc_status,
+                            notes=notes,
+                            reviewed_by=reviewed_by,
+                            flagged=flagged
+                        )
+                        
+                        if success:
+                            stats['imported'] += 1
+                        else:
+                            stats['errors'] += 1
+                            stats['messages'].append(f"Failed to update scan {scan_id}")
+                    
+                    except Exception as e:
+                        stats['errors'] += 1
+                        stats['messages'].append(f"Error processing row: {e}")
+            
+            stats['messages'].append(
+                f"Import complete: {stats['imported']} imported, "
+                f"{stats['skipped']} skipped, {stats['errors']} errors"
+            )
+            
+            return stats
+            
+        except Exception as e:
+            stats['messages'].append(f"Error importing CSV: {e}")
+            return stats
+    
+    def get_unsynced_qc_count(self, dataset_id: int) -> int:
+        """
+        Get count of scans with QC data not yet synced to platform (v3.1+).
+        
+        Args:
+            dataset_id: Dataset ID
+            
+        Returns:
+            int: Number of unsynced scans
+        """
+        unsynced = self.db.get_unsynced_scans(dataset_id)
+        return len(unsynced)
+    
     def validate_qc_status(self, status: str) -> bool:
         """
         Validate if QC status is valid.
@@ -346,7 +571,7 @@ def format_qc_history_entry(entry: Dict) -> str:
     from src.utils import format_timestamp
     time_str = format_timestamp(entry.get('reviewed_date'))
     
-    return f"{subject}: {old} → {new} (by {reviewer}, {time_str})"
+    return f"{subject}: {old} -> {new} (by {reviewer}, {time_str})"
 
 
 def calculate_qc_metrics(subjects: List[Dict]) -> Dict:

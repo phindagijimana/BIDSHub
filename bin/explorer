@@ -1,13 +1,19 @@
 #!/bin/bash
 #
-# Data Explorer CLI - Unified command-line interface
-# Usage: bin/explorer <command> [options]
+# BIDSHub CLI - Unified command-line interface
+# Usage: ./hub <command> [options]
 #
 
 set -e
 
+# Resolve symlinks to get actual script location
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    SCRIPT=$(readlink "$SCRIPT")
+done
+
 # Change to project root directory (parent of bin/)
-cd "$(dirname "$0")/.."
+cd "$(dirname "$SCRIPT")/.."
 
 # Colors
 RED='\033[0;31m'
@@ -18,7 +24,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-APP_NAME="Data Explorer"
+APP_NAME="BIDSHub"
 VENV_DIR="venv"
 LOG_DIR="logs"
 PID_FILE=".explorer.pid"
@@ -94,6 +100,30 @@ cmd_install() {
     print_info "Run './explorer start' to launch the application"
 }
 
+# Helper: Find available port
+find_available_port() {
+    local start_port=8501
+    
+    # Try default port first
+    if ! lsof -i:$start_port > /dev/null 2>&1; then
+        echo $start_port
+        return
+    fi
+    
+    # Try other ports
+    for port in {8500..8550}; do
+        if [ $port -eq $start_port ]; then
+            continue
+        fi
+        if ! lsof -i:$port > /dev/null 2>&1; then
+            echo $port
+            return
+        fi
+    done
+    
+    echo ""
+}
+
 # Command: start
 cmd_start() {
     print_header "Starting $APP_NAME"
@@ -116,29 +146,40 @@ cmd_start() {
     # Check virtual environment
     if [ ! -d "$VENV_DIR" ]; then
         print_error "Virtual environment not found"
-        print_info "Run './explorer install' first"
+        print_info "Run './hub install' first"
         exit 1
     fi
     
-    # Start application
-    print_info "Launching application..."
-    ./launch.py &
+    # Activate virtual environment
+    source $VENV_DIR/bin/activate
     
-    echo $! > $PID_FILE
-    
-    # Wait a bit for port to be determined
-    sleep 2
-    
-    # Try to find the port
-    PORT=$(lsof -ti:8501,8500-8550 -sTCP:LISTEN | head -1 | xargs -I {} lsof -Pan -p {} -i | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
-    if [ ! -z "$PORT" ]; then
-        echo $PORT > $PORT_FILE
-        print_success "Started on port $PORT"
-        print_info "URL: http://localhost:$PORT"
-    else
-        print_success "Started"
-        print_info "Check logs for URL: ./explorer logs"
+    # Find available port
+    print_info "Finding available port..."
+    PORT=$(find_available_port)
+    if [ -z "$PORT" ]; then
+        print_error "No available ports in range 8500-8550"
+        exit 1
     fi
+    
+    # Start application directly with streamlit
+    print_info "Launching application on port $PORT..."
+    python -m streamlit run app.py --server.port $PORT --server.headless true > /dev/null 2>&1 &
+    
+    # Get the actual Streamlit PID
+    LAUNCH_PID=$!
+    sleep 3
+    
+    # Find the actual streamlit process (child of bash)
+    STREAMLIT_PID=$(pgrep -P $LAUNCH_PID 2>/dev/null || echo $LAUNCH_PID)
+    
+    # Save PID and port
+    echo $STREAMLIT_PID > $PID_FILE
+    echo $PORT > $PORT_FILE
+    
+    print_success "Started on port $PORT"
+    print_info "PID: $STREAMLIT_PID"
+    print_info "URL: http://localhost:$PORT"
+    print_info "Run './hub status' to check status"
 }
 
 # Command: stop
@@ -189,6 +230,12 @@ cmd_restart() {
     cmd_start
 }
 
+# Helper: Detect Streamlit port
+detect_streamlit_port() {
+    local port=$(lsof -i -P -n 2>/dev/null | grep streamlit | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
+    echo $port
+}
+
 # Command: status
 cmd_status() {
     print_header "$APP_NAME Status"
@@ -198,15 +245,26 @@ cmd_status() {
     if [ -f "$PID_FILE" ]; then
         PID=$(cat $PID_FILE)
         if ps -p $PID > /dev/null 2>&1; then
-            PORT=$(cat $PORT_FILE 2>/dev/null || echo "unknown")
+            PORT=$(cat $PORT_FILE 2>/dev/null)
+            
+            # If port file missing, try to detect
+            if [ -z "$PORT" ]; then
+                PORT=$(detect_streamlit_port)
+                if [ ! -z "$PORT" ]; then
+                    echo $PORT > $PORT_FILE
+                else
+                    PORT="unknown"
+                fi
+            fi
+            
             print_success "Running"
             echo "  PID:  $PID"
             echo "  Port: $PORT"
             echo "  URL:  http://localhost:$PORT"
             
             # Show resource usage
-            CPU=$(ps -p $PID -o %cpu= || echo "N/A")
-            MEM=$(ps -p $PID -o %mem= || echo "N/A")
+            CPU=$(ps -p $PID -o %cpu= 2>/dev/null | xargs || echo "N/A")
+            MEM=$(ps -p $PID -o %mem= 2>/dev/null | xargs || echo "N/A")
             echo "  CPU:  ${CPU}%"
             echo "  MEM:  ${MEM}%"
         else
@@ -215,16 +273,17 @@ cmd_status() {
         fi
     else
         # Try to find streamlit processes
-        PIDS=$(pgrep -f "streamlit run app.py" || echo "")
+        PIDS=$(pgrep -f "streamlit run app.py" 2>/dev/null || echo "")
         if [ ! -z "$PIDS" ]; then
             print_warning "Running but no PID file found"
             echo "  PIDs: $PIDS"
             
             # Try to find port
-            PORT=$(lsof -ti:8501,8500-8550 -sTCP:LISTEN | head -1 | xargs -I {} lsof -Pan -p {} -i | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
+            PORT=$(detect_streamlit_port)
             if [ ! -z "$PORT" ]; then
                 echo "  Port: $PORT"
                 echo "  URL:  http://localhost:$PORT"
+                print_info "Run './hub stop' to clean up"
             fi
         else
             print_error "Not running"
@@ -299,7 +358,7 @@ cmd_update() {
         print_success "Dependencies updated"
     else
         print_warning "Virtual environment not found"
-        print_info "Run './explorer install' first"
+        print_info "Run './hub install' first"
     fi
     
     echo ""
@@ -419,7 +478,7 @@ cmd_config() {
 cmd_help() {
     print_header "$APP_NAME CLI"
     echo ""
-    echo "Usage: ./explorer <command> [options]"
+    echo "Usage: ./hub <command> [options]"
     echo ""
     echo "Commands:"
     echo "  ${GREEN}install${NC}   Install dependencies and initialize database"
@@ -435,11 +494,11 @@ cmd_help() {
     echo "  ${GREEN}help${NC}      Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./explorer install      # First time setup"
-    echo "  ./explorer start        # Launch the app"
-    echo "  ./explorer status       # Check if running"
-    echo "  ./explorer logs         # View logs"
-    echo "  ./explorer restart      # Restart the app"
+    echo "  ./hub install      # First time setup"
+    echo "  ./hub start        # Launch the app"
+    echo "  ./hub status       # Check if running"
+    echo "  ./hub logs         # View logs"
+    echo "  ./hub restart      # Restart the app"
     echo ""
 }
 

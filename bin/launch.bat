@@ -1,5 +1,5 @@
 @echo off
-REM Data Explorer Launch Script for Windows
+REM BIDSHub Launch Script for Windows
 REM Automatically finds available port between 8500-8550
 
 REM Change to project root directory (parent of bin\)
@@ -13,7 +13,7 @@ set MAX_PORT=8550
 set DEFAULT_PORT=8501
 
 echo ============================================================
-echo            Data Explorer Launch Script
+echo            BIDSHub Launch Script
 echo ============================================================
 echo.
 
@@ -69,7 +69,7 @@ echo.
 
 REM Launch Streamlit
 echo ------------------------------------------------------------
-echo Launching Data Explorer on port %PORT%...
+echo Launching BIDSHub on port %PORT%...
 echo ------------------------------------------------------------
 echo.
 echo   Local URL:   http://localhost:%PORT%

@@ -1,5 +1,5 @@
 """
-Integration tests for Data Explorer workflows.
+Integration tests for BIDSHub workflows.
 """
 
 import pytest
@@ -193,7 +193,7 @@ class TestEndToEndWorkflow:
     """Test complete end-to-end workflows."""
     
     def test_filter_qc_download_workflow(self, setup_test_environment):
-        """Test complete workflow: filter → QC → download."""
+        """Test complete workflow: filter -> QC -> download."""
         env = setup_test_environment
         
         # Step 1: Initialize database with subjects (v1.5+)

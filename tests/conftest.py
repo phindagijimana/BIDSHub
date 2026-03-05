@@ -1,11 +1,19 @@
 """
-Shared pytest fixtures and configuration for Data Explorer tests.
+Shared pytest fixtures and configuration for BIDSHub tests.
 """
 
 import pytest
 from pathlib import Path
 import tempfile
 import shutil
+import sys
+import sqlite3
+import os
+
+# Add parent to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.database import Database
 
 
 @pytest.fixture
@@ -17,23 +25,52 @@ def temp_dir():
 
 
 @pytest.fixture
+def test_db():
+    """Create a temporary database for testing."""
+    # Create temp directory
+    temp_dir = tempfile.mkdtemp()
+    db_path = os.path.join(temp_dir, 'test.db')
+    
+    # Create database
+    db = Database(db_path)
+    
+    # Add test dataset (use actual database columns from init_db.py)
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        INSERT INTO datasets (name, platform, dataset_id_external, root_path, status)
+        VALUES ('test_dataset', 'local', 'test_local', '/test/path', 'active')
+    """)
+    conn.commit()
+    conn.close()
+    
+    yield db
+    
+    # Cleanup
+    try:
+        os.remove(db_path)
+        os.rmdir(temp_dir)
+    except:
+        pass
+
+
+@pytest.fixture
 def sample_bids_structure(temp_dir):
     """
     Create a sample BIDS directory structure for testing.
     
     Structure:
         temp_dir/
-        ├── participants.tsv
-        ├── dataset_description.json
-        └── sub-001/
-            ├── ses-2WK/
-            │   └── anat/
-            │       ├── sub-001_ses-2WK_T1w.nii.gz
-            │       └── sub-001_ses-2WK_T1w.json
-            └── ses-6MO/
-                └── anat/
-                    ├── sub-001_ses-6MO_T1w.nii.gz
-                    └── sub-001_ses-6MO_T1w.json
+        +── participants.tsv
+        +── dataset_description.json
+        +── sub-001/
+            +── ses-2WK/
+            |   +── anat/
+            |       +── sub-001_ses-2WK_T1w.nii.gz
+            |       +── sub-001_ses-2WK_T1w.json
+            +── ses-6MO/
+                +── anat/
+                    +── sub-001_ses-6MO_T1w.nii.gz
+                    +── sub-001_ses-6MO_T1w.json
     """
     # Create participants.tsv
     participants_data = """participant_id\tage\tsex\tdiagnosis

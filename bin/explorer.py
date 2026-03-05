@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Data Explorer CLI - Cross-platform command-line interface
+BIDSHub CLI - Cross-platform command-line interface
 Works on macOS, Linux, and Windows
 
-Usage: python explorer.py <command> [options]
+Usage: ./hub <command> [options]
 """
 
 import os
@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 # Configuration
-APP_NAME = "Data Explorer"
+APP_NAME = "BIDSHub"
 VENV_DIR = "venv"
 LOG_DIR = "logs"
 PID_FILE = ".explorer.pid"
@@ -137,6 +137,63 @@ def get_process_info(pid):
         return {'cpu': 'N/A', 'memory': 'N/A'}
 
 
+def find_available_port(start_port=8501):
+    """Find an available port in the range 8500-8550."""
+    import socket
+    
+    # Try default port first
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('localhost', start_port))
+            return start_port
+    except OSError:
+        pass
+    
+    # Try other ports in range
+    for port in range(8500, 8551):
+        if port == start_port:
+            continue
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return port
+        except OSError:
+            continue
+    
+    return None
+
+
+def detect_streamlit_port():
+    """Detect port of running Streamlit process."""
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ['netstat', '-ano', '|', 'findstr', ':850'],
+                capture_output=True, text=True, shell=True
+            )
+        else:
+            result = subprocess.run(
+                ['lsof', '-i', '-P', '-n'],
+                capture_output=True, text=True
+            )
+            
+        # Parse output to find Streamlit port
+        for line in result.stdout.split('\n'):
+            if 'streamlit' in line.lower() and 'LISTEN' in line:
+                parts = line.split()
+                for part in parts:
+                    if ':' in part and '850' in part:
+                        port = part.split(':')[-1]
+                        try:
+                            return int(port)
+                        except:
+                            continue
+    except:
+        pass
+    
+    return None
+
+
 # Command: install
 def cmd_install():
     """Install dependencies and initialize database."""
@@ -218,34 +275,56 @@ def cmd_start():
     # Check virtual environment
     if not os.path.exists(VENV_DIR):
         print_error("Virtual environment not found")
-        print_info("Run './explorer install' first")
+        print_info("Run './hub install' first")
         sys.exit(1)
     
     # Start application
     print_info("Launching application...")
     venv_python = get_venv_python()
     
-    # Launch in background
+    # Find available port
+    port = find_available_port()
+    if port is None:
+        print_error("No available ports in range 8500-8550")
+        sys.exit(1)
+    
+    # Launch Streamlit directly (not via launch.py wrapper)
     if platform.system() == "Windows":
         # Windows: use subprocess with DETACHED_PROCESS
-        subprocess.Popen(
-            [venv_python, "launch.py"],
+        process = subprocess.Popen(
+            [venv_python, "-m", "streamlit", "run", "app.py",
+             "--server.port", str(port),
+             "--server.headless", "true"],
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
     else:
-        # Unix: use nohup
-        subprocess.Popen(
-            [venv_python, "launch.py"],
+        # Unix: use subprocess with new process group
+        process = subprocess.Popen(
+            [venv_python, "-m", "streamlit", "run", "app.py",
+             "--server.port", str(port),
+             "--server.headless", "true"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setpgrp
         )
     
-    print_success("Started")
-    print_info("Run './explorer status' to check status")
-    print_info("The browser should open automatically")
+    # Save the actual Streamlit PID
+    with open(PID_FILE, 'w') as f:
+        f.write(str(process.pid))
+    
+    # Save the port
+    with open(PORT_FILE, 'w') as f:
+        f.write(str(port))
+    
+    # Wait a moment for Streamlit to start
+    time.sleep(2)
+    
+    print_success(f"Started on port {port}")
+    print_info(f"PID: {process.pid}")
+    print_info(f"URL: http://localhost:{port}")
+    print_info("Run './hub status' to check status")
 
 
 # Command: stop
@@ -350,6 +429,14 @@ def cmd_status():
             if os.path.exists(PORT_FILE):
                 with open(PORT_FILE, 'r') as f:
                     port = f.read().strip()
+            else:
+                # Try to detect port
+                detected_port = detect_streamlit_port()
+                if detected_port:
+                    port = str(detected_port)
+                    # Save for future reference
+                    with open(PORT_FILE, 'w') as f:
+                        f.write(str(port))
             
             print_success("Running")
             print(f"  PID:  {pid}")
@@ -366,7 +453,16 @@ def cmd_status():
             if os.path.exists(PORT_FILE):
                 os.remove(PORT_FILE)
     else:
+        # No PID file - try to detect running Streamlit anyway
         print_error("Not running")
+        
+        # Try to find orphaned Streamlit processes
+        port = detect_streamlit_port()
+        if port:
+            print_warning("Found orphaned Streamlit process")
+            print_info(f"Port: {port}")
+            print_info(f"URL: http://localhost:{port}")
+            print_info("Run './explorer stop' to clean up")
     
     print()
     
@@ -377,13 +473,13 @@ def cmd_status():
         print_error("Virtual environment: not found")
     
     # Database status
-    db_path = Path("data/tracktbi.db")
+    db_path = Path("data/bidshub.db")
     if db_path.exists():
         size = db_path.stat().st_size
         size_str = f"{size / 1024:.0f}K" if size < 1024 * 1024 else f"{size / (1024*1024):.1f}M"
         print_success(f"Database: {size_str}")
     else:
-        print_warning("Database: not initialized")
+        print_warning("Database: not initialized (will auto-create on first launch)")
 
 
 # Command: logs
@@ -459,7 +555,7 @@ def cmd_update():
         print_success("Dependencies updated")
     else:
         print_warning("Virtual environment not found")
-        print_info("Run './explorer install' first")
+        print_info("Run './hub install' first")
     
     print()
     print_success("Update complete!")
@@ -548,10 +644,16 @@ def cmd_clean():
         print_success("Virtual environment removed")
     
     # Remove database
-    if os.path.exists("data/tracktbi.db"):
+    if os.path.exists("data/bidshub.db"):
         print_info("Removing database...")
-        os.remove("data/tracktbi.db")
+        os.remove("data/bidshub.db")
         print_success("Database removed")
+    
+    # Also remove backup files
+    import glob
+    for backup in glob.glob("data/bidshub.db.backup_*"):
+        os.remove(backup)
+        print_info(f"Removed backup: {Path(backup).name}")
     
     # Remove logs
     if os.path.exists(LOG_DIR):
@@ -605,7 +707,7 @@ def cmd_help():
     """Show help message."""
     print_header(f"{APP_NAME} CLI")
     print()
-    print("Usage: ./explorer <command>")
+    print("Usage: ./hub <command>")
     print()
     print("Commands:")
     print("  install   Install dependencies and initialize database")
@@ -621,11 +723,11 @@ def cmd_help():
     print("  help      Show this help message")
     print()
     print("Examples:")
-    print("  ./explorer install      # First time setup")
-    print("  ./explorer start        # Launch the app")
-    print("  ./explorer status       # Check if running")
-    print("  ./explorer logs         # View logs")
-    print("  ./explorer restart      # Restart the app")
+    print("  ./hub install      # First time setup")
+    print("  ./hub start        # Launch the app")
+    print("  ./hub status       # Check if running")
+    print("  ./hub logs         # View logs")
+    print("  ./hub restart      # Restart the app")
     print()
     print(f"Platform: {platform.system()} {platform.release()}")
     print(f"Python: {sys.version.split()[0]}")

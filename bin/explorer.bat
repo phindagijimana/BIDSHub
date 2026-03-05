@@ -1,13 +1,13 @@
 @echo off
-REM Data Explorer CLI for Windows
-REM Usage: bin\explorer.bat <command> [options]
+REM BIDSHub CLI for Windows
+REM Usage: hub.bat <command> [options]
 
 REM Change to project root directory (parent of bin\)
 cd /d "%~dp0\.."
 
 setlocal enabledelayedexpansion
 
-set APP_NAME=Data Explorer
+set APP_NAME=BIDSHub
 set VENV_DIR=venv
 set PID_FILE=.explorer.pid
 
@@ -291,7 +291,7 @@ echo ============================================================
 echo   %APP_NAME% CLI
 echo ============================================================
 echo.
-echo Usage: explorer.bat ^<command^> [options]
+echo Usage: hub.bat ^<command^> [options]
 echo.
 echo Commands:
 echo   install   Install dependencies and initialize database
@@ -307,11 +307,11 @@ echo   config    Show configuration
 echo   help      Show this help message
 echo.
 echo Examples:
-echo   explorer.bat install      # First time setup
-echo   explorer.bat start        # Launch the app
-echo   explorer.bat status       # Check if running
-echo   explorer.bat logs         # View logs
-echo   explorer.bat restart      # Restart the app
+echo   hub.bat install      # First time setup
+echo   hub.bat start        # Launch the app
+echo   hub.bat status       # Check if running
+echo   hub.bat logs         # View logs
+echo   hub.bat restart      # Restart the app
 echo.
 goto end
 

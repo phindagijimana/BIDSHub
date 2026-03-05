@@ -1,7 +1,8 @@
 """
-Data Explorer - Main Streamlit Application
+BIDSHub - Main Streamlit Application
 
-A professional BIDS dataset management tool with Pennsieve integration.
+A professional BIDS dataset management tool for neuroimaging data.
+Multi-platform support: Local, Pennsieve, OpenNeuro, XNAT, DANDI, HPC, Remote Server.
 """
 
 import streamlit as st
@@ -10,7 +11,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -25,12 +26,16 @@ from src.pennsieve_agent import PennsieveAgent, check_available_space
 from src.openneuro_agent import OpenNeuroAgent, check_openneuro_connection
 from src.automated_qc import AutomatedQC
 from src.metadata_filter import MetadataFilter
+from src.agent_factory import AgentFactory, create_agent_factory
+from src.bids_utils import extract_bids_path, normalize_subject_id, normalize_session_id, detect_sessions_in_path
+from src.error_messages import ErrorMessages, handle_agent_error
+from src.cache_manager import CacheManager
 
 
 # Page configuration
 st.set_page_config(
-    page_title="Data Explorer",
-    page_icon="🧠",
+    page_title="BIDSHub",
+    page_icon="[B]",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -41,11 +46,9 @@ apply_custom_theme()
 
 def init_session_state():
     """Initialize Streamlit session state variables."""
-    if 'setup_complete' not in st.session_state:
-        st.session_state.setup_complete = False
-    
+    # No setup requirement - users can navigate freely
     if 'current_page' not in st.session_state:
-        st.session_state.current_page = 'setup' if not st.session_state.setup_complete else 'dashboard'
+        st.session_state.current_page = 'home'
     
     if 'bids_root' not in st.session_state:
         st.session_state.bids_root = None
@@ -99,7 +102,7 @@ def init_session_state():
 
 
 def execute_downloads(download_manager, database):
-    """Execute queued downloads routing to correct agent per dataset (v1.5+ multi-dataset)."""
+    """Execute queued downloads routing to correct agent per dataset (v3.1.1+: all platforms)."""
     
     queue_items = download_manager.get_queue_items(status='queued')
     
@@ -107,10 +110,9 @@ def execute_downloads(download_manager, database):
         st.info("No items queued for download")
         return
     
-    # Group items by dataset and platform
+    # Group items by dataset
     datasets_cache = {}
-    pennsieve_groups = {}  # dataset_id -> items
-    openneuro_groups = {}  # dataset_id -> items
+    dataset_groups = {}  # dataset_id -> items
     
     for item in queue_items:
         dataset_id = item.get('dataset_id')
@@ -123,30 +125,30 @@ def execute_downloads(download_manager, database):
                 continue
             datasets_cache[dataset_id] = dataset
         
+        # Group by dataset
+        if dataset_id not in dataset_groups:
+            dataset_groups[dataset_id] = []
+        dataset_groups[dataset_id].append(item)
+    
+    # Execute downloads per dataset using AgentFactory
+    from src.agent_factory import AgentFactory
+    factory = AgentFactory(database)
+    
+    for dataset_id, items in dataset_groups.items():
         dataset = datasets_cache[dataset_id]
+        platform_name = dataset['platform'].title()
         
-        # Group by platform
+        st.info(f"Downloading from {platform_name}: {dataset['name']}")
+        
+        # Use platform-specific execution based on platform type
         if dataset['platform'] == 'pennsieve':
-            if dataset_id not in pennsieve_groups:
-                pennsieve_groups[dataset_id] = []
-            pennsieve_groups[dataset_id].append(item)
-        else:
-            if dataset_id not in openneuro_groups:
-                openneuro_groups[dataset_id] = []
-            openneuro_groups[dataset_id].append(item)
-    
-    # Execute downloads per platform
-    if pennsieve_groups:
-        for dataset_id, items in pennsieve_groups.items():
-            dataset = datasets_cache[dataset_id]
-            st.info(f"Downloading from Pennsieve: {dataset['name']}")
             execute_pennsieve_downloads_multi(items, dataset, database)
-    
-    if openneuro_groups:
-        for dataset_id, items in openneuro_groups.items():
-            dataset = datasets_cache[dataset_id]
-            st.info(f"Downloading from OpenNeuro: {dataset['name']}")
+        elif dataset['platform'] in ['openneuro', 'dandi', 'xnat']:
             execute_openneuro_downloads_multi(items, dataset, database)
+        elif dataset['platform'] in ['hpc', 'remote_server']:
+            execute_ssh_downloads_multi(items, dataset, database, factory)
+        else:
+            st.warning(f"Download not implemented for platform: {dataset['platform']}")
 
 
 def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
@@ -159,12 +161,14 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
     api_secret = dataset_config.get('api_secret_encrypted') or os.getenv('PENNSIEVE_API_SECRET')
     
     if not api_key or not api_secret:
-        st.error(f"❌ Pennsieve credentials not configured for dataset '{dataset_config['name']}'")
+        st.error(f"[ERROR] Pennsieve credentials not configured for dataset '{dataset_config['name']}'")
         return
     
     agent = st.session_state.pennsieve_agent
     if not agent:
-        st.error("❌ Pennsieve Agent not available. Install with: pip install pennsieve")
+        st.error(ErrorMessages.format_error('CONNECTION_FAILED', 'pennsieve', 
+                                            'Pennsieve Agent not installed'))
+        st.code("pip install pennsieve")
         return
     
     if not queue_items:
@@ -178,7 +182,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Download Details", expanded=False)
+        details_expander = st.expander("[Data] Download Details", expanded=False)
     
     total = len(queue_items)
     successful = 0
@@ -271,7 +275,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'file': file_name,
-                'status': '✓ Success',
+                'status': '[OK] Success',
                 'size': format_file_size(file_size),
                 'time': f"{item_elapsed:.1f}s",
                 'speed': f"{speed_mbps:.2f} MB/s" if speed_mbps > 0 else "N/A"
@@ -285,7 +289,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'file': file_name,
-                'status': '✗ Failed',
+                'status': '[X] Failed',
                 'size': format_file_size(file_size),
                 'time': f"{item_elapsed:.1f}s",
                 'speed': error_msg or "Failed"
@@ -311,14 +315,14 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
     
     if successful > 0:
         st.success(f"""
-        ✓ **Download Complete!**  
+        [OK] **Download Complete!**  
         **Success**: {successful}/{total} files ({(successful/total)*100:.1f}%)  
         **Total Size**: {format_file_size(downloaded_bytes)}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
         **Avg Speed**: {avg_speed:.2f} MB/s
         """)
     if failed > 0:
-        st.error(f"✗ {failed} files failed to download. Check the download log for details.")
+        st.error(f"[X] {failed} files failed to download. Check the download log for details.")
     
     # Save download session to history
     database.execute_query("""
@@ -348,7 +352,9 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
     
     agent = st.session_state.openneuro_agent
     if not agent:
-        st.error("❌ OpenNeuro Agent not available. Install with: pip install openneuro-py")
+        st.error(ErrorMessages.format_error('CONNECTION_FAILED', 'openneuro',
+                                            'openneuro-py not installed'))
+        st.code("pip install openneuro-py")
         return
     
     dataset_id = dataset_config['dataset_id_external']
@@ -373,7 +379,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Download Details", expanded=False)
+        details_expander = st.expander("[Data] Download Details", expanded=False)
     
     total_subjects = len(subjects_to_download)
     total_files = len(queue_items)
@@ -468,7 +474,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'subject': subject_id,
-                'status': '✓ Success',
+                'status': '[OK] Success',
                 'files': len(items),
                 'time': f"{subject_elapsed:.1f}s"
             })
@@ -483,7 +489,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'subject': subject_id,
-                'status': '✗ Failed',
+                'status': '[X] Failed',
                 'files': len(items),
                 'time': error_msg or "Failed"
             })
@@ -507,14 +513,14 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
     
     if successful > 0:
         st.success(f"""
-        ✓ **Download Complete!**  
+        [OK] **Download Complete!**  
         **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
         **Total Files**: {total_files}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
         **Avg Time/Subject**: {total_elapsed/successful:.1f}s
         """)
     if failed > 0:
-        st.error(f"✗ {failed} subjects failed to download. Check the download log for details.")
+        st.error(f"[X] {failed} subjects failed to download. Check the download log for details.")
     
     # Save download session to history
     database.execute_query("""
@@ -525,6 +531,212 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
         json.dumps({
             'timestamp': datetime.now().isoformat(),
             'platform': 'openneuro',
+            'total_subjects': total_subjects,
+            'total_files': total_files,
+            'successful': successful,
+            'failed': failed,
+            'duration': total_elapsed
+        })
+    ))
+    
+    time.sleep(2)
+    st.rerun()
+
+
+def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
+    """Execute downloads from HPC/Remote Server via SSH/SFTP (v3.1.1+)."""
+    import time
+    from src.utils import format_file_size
+    
+    try:
+        agent = factory.get_agent(dataset_config['id'])
+    except Exception as e:
+        platform = dataset_config['platform']
+        st.error(handle_agent_error(e, platform, 'connection'))
+        st.info(ErrorMessages.get_platform_help(platform))
+        return
+    
+    if not agent:
+        platform = dataset_config['platform']
+        st.error(ErrorMessages.format_error('CONNECTION_FAILED', platform))
+        return
+    
+    dataset_path = dataset_config['dataset_id_external']
+    target_dir = dataset_config.get('root_path') or str(Path.home() / "data-explorer" / "datasets" / dataset_config['name'])
+    
+    if not queue_items:
+        st.info("No items queued for download")
+        return
+    
+    # Group by subject
+    subjects_to_download = {}
+    for item in queue_items:
+        subject_id = item['subject_id']
+        if subject_id not in subjects_to_download:
+            subjects_to_download[subject_id] = []
+        subjects_to_download[subject_id].append(item)
+    
+    # Create progress container
+    progress_container = st.container()
+    
+    with progress_container:
+        progress_bar = st.progress(0)
+        status_col1, status_col2, status_col3 = st.columns(3)
+        status_text = st.empty()
+        details_expander = st.expander("[Data] Download Details", expanded=False)
+    
+    total_subjects = len(subjects_to_download)
+    total_files = len(queue_items)
+    successful = 0
+    failed = 0
+    start_time = time.time()
+    
+    download_log = []
+    
+    # Download each subject
+    for i, (subject_id, items) in enumerate(subjects_to_download.items()):
+        elapsed = time.time() - start_time
+        if i > 0 and elapsed > 0:
+            avg_time_per_subject = elapsed / i
+            remaining_subjects = total_subjects - i
+            eta_seconds = avg_time_per_subject * remaining_subjects
+            eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
+        else:
+            eta_str = "Calculating..."
+        
+        status_text.markdown(f"""
+        **Downloading subject {i+1}/{total_subjects}**: `{subject_id}`  
+        **Files**: {len(items)} | **Progress**: {(i/total_subjects)*100:.1f}% | **ETA**: {eta_str}
+        """)
+        
+        with status_col1:
+            st.metric("Subjects", f"{i}/{total_subjects}")
+        with status_col2:
+            st.metric("Success", successful, delta="+1" if i > 0 and successful > 0 else None)
+        with status_col3:
+            st.metric("Failed", failed, delta="+1" if i > 0 and failed > 0 else None, delta_color="inverse")
+        
+        # Mark items as downloading
+        for item in items:
+            database.execute_query(
+                "UPDATE download_queue SET status = 'downloading', started_date = ? WHERE id = ?",
+                (datetime.now(), item['id'])
+            )
+        
+        subject_start_time = time.time()
+        
+        # Progress callback
+        def progress_callback(msg):
+            status_text.markdown(f"""
+            **Subject {i+1}/{total_subjects}**: `{subject_id}`  
+            **Status**: {msg} | **ETA**: {eta_str}
+            """)
+        
+        # Download subject via SSH/SFTP
+        max_retries = 2
+        success = False
+        error_msg = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Determine sessions to download
+                sessions = None  # Download all sessions
+                
+                success = agent.download_subject(
+                    dataset_path=dataset_path,
+                    subject_id=subject_id,
+                    target_dir=target_dir,
+                    sessions=sessions,
+                    progress_callback=progress_callback
+                )
+                
+                if success:
+                    break
+                else:
+                    error_msg = f"Download failed (attempt {attempt+1}/{max_retries})"
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+        
+        subject_elapsed = time.time() - subject_start_time
+        
+        if success:
+            successful += 1
+            # Mark all items as completed
+            for item in items:
+                database.execute_query(
+                    "UPDATE download_queue SET status = 'completed', completed_date = ? WHERE id = ?",
+                    (datetime.now(), item['id'])
+                )
+                # Update scan as downloaded
+                database.execute_query(
+                    "UPDATE scans SET is_downloaded = 1, download_date = ? WHERE file_path = ?",
+                    (datetime.now(), item['file_path'])
+                )
+            
+            download_log.append({
+                'subject': subject_id,
+                'status': '[OK] Success',
+                'files': len(items),
+                'time': f"{subject_elapsed:.1f}s"
+            })
+        else:
+            failed += 1
+            # Mark items as failed
+            for item in items:
+                database.execute_query(
+                    "UPDATE download_queue SET status = 'failed', error_message = ? WHERE id = ?",
+                    (error_msg or "Download failed", item['id'])
+                )
+            
+            download_log.append({
+                'subject': subject_id,
+                'status': '[X] Failed',
+                'files': len(items),
+                'time': error_msg or "Failed"
+            })
+        
+        # Update progress
+        progress_bar.progress(min((i + 1) / total_subjects, 0.99))
+        
+        # Update details
+        with details_expander:
+            if download_log:
+                log_df = pd.DataFrame(download_log)
+                st.dataframe(log_df, use_container_width=True, hide_index=True)
+    
+    # Complete at 100%
+    progress_bar.progress(1.0)
+    
+    # Final statistics
+    total_elapsed = time.time() - start_time
+    
+    status_text.empty()
+    
+    if successful > 0:
+        st.success(f"""
+        [OK] **Download Complete!**  
+        **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
+        **Total Files**: {total_files}  
+        **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
+        **Avg Time/Subject**: {total_elapsed/successful:.1f}s
+        """)
+    if failed > 0:
+        st.error(f"[X] {failed} subjects failed. Check the download log.")
+    
+    # Save to history
+    database.execute_query("""
+        INSERT INTO metadata (key, value) 
+        VALUES (?, ?)
+    """, (
+        f"download_session_{int(time.time())}",
+        json.dumps({
+            'timestamp': datetime.now().isoformat(),
+            'platform': dataset_config['platform'],
+            'dataset': dataset_config['name'],
             'total_subjects': total_subjects,
             'total_files': total_files,
             'successful': successful,
@@ -548,18 +760,19 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     api_secret = os.getenv('PENNSIEVE_API_SECRET')
     
     if not api_key or not api_secret:
-        st.error("❌ Pennsieve credentials not configured")
+        st.error(ErrorMessages.format_error('AUTH_FAILED', 'pennsieve'))
+        st.info(ErrorMessages.suggest_fix('CONNECTION_FAILED', 'pennsieve'))
         return
     
     agent = st.session_state.pennsieve_agent
     if not agent:
-        st.error("❌ Pennsieve Agent not available")
+        st.error("[ERROR] Pennsieve Agent not available")
         return
     
     # Filter out non-existent files
     valid_paths = [p for p in file_paths if Path(p).exists()]
     if len(valid_paths) < len(file_paths):
-        st.warning(f"⚠️ Skipping {len(file_paths) - len(valid_paths)} non-existent files")
+        st.warning(f"[WARNING] Skipping {len(file_paths) - len(valid_paths)} non-existent files")
     
     if not valid_paths:
         st.error("No valid files to upload")
@@ -575,7 +788,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Upload Details", expanded=False)
+        details_expander = st.expander("[Data] Upload Details", expanded=False)
     
     total = len(valid_paths)
     uploaded_bytes = 0
@@ -641,14 +854,14 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
         if file_path in results.get('errors', []):
             upload_log.append({
                 'file': file_name,
-                'status': '✗ Failed',
+                'status': '[X] Failed',
                 'size': format_file_size(file_size),
                 'error': results.get('error_messages', {}).get(file_path, 'Unknown error')
             })
         else:
             upload_log.append({
                 'file': file_name,
-                'status': '✓ Success',
+                'status': '[OK] Success',
                 'size': format_file_size(file_size),
                 'error': '—'
             })
@@ -665,7 +878,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     
     if results['successful'] > 0:
         st.success(f"""
-        ✓ **Upload Complete!**  
+        [OK] **Upload Complete!**  
         **Success**: {results['successful']}/{total} files ({(results['successful']/total)*100:.1f}%)  
         **Total Size**: {format_file_size(successful_size)}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
@@ -673,8 +886,8 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
         **Destination**: `{remote_path}`
         """)
     if results['failed'] > 0:
-        st.error(f"✗ {results['failed']} files failed to upload")
-        with st.expander("❌ View Failed Files"):
+        st.error(f"[X] {results['failed']} files failed to upload")
+        with st.expander("[ERROR] View Failed Files"):
             for error_file in results['errors']:
                 error_msg = results.get('error_messages', {}).get(error_file, 'Unknown error')
                 st.text(f"• {Path(error_file).name}: {error_msg}")
@@ -719,11 +932,12 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
     if current_page not in ['subject_detail']:
         return
     
-    # Page names mapping
+    # Page names mapping (v3.1.1+: Added transfer)
     page_names = {
         'dashboard': 'Dashboard',
         'subjects': 'Subjects',
         'subject_detail': 'Subject Detail',
+        'transfer': 'Data Transfer',
         'downloads': 'Download Manager',
         'qc': 'QC Dashboard',
         'export': 'Export',
@@ -737,100 +951,103 @@ def render_breadcrumb(current_page: str, parent_page: str = None):
 def render_sidebar():
     """Render navigation sidebar."""
     with st.sidebar:
-        st.markdown('<h1 style="color: #002d72;">Data Explorer</h1>', 
+        st.markdown('<h1 style="color: #002d72;">BIDSHub</h1>', 
                    unsafe_allow_html=True)
         
         if st.session_state.dataset_name:
-            platform_emoji = "🔐" if st.session_state.platform == 'pennsieve' else "🌍"
+            platform_emoji = "[P]" if st.session_state.platform == 'pennsieve' else "[O]"
             platform_name = st.session_state.platform.title()
             st.caption(f"**Platform:** {platform_emoji} {platform_name}")
             st.caption(f"**Dataset:** {st.session_state.dataset_name}")
         
         st.markdown("---")
         
-        if st.session_state.setup_complete:
-            st.markdown("### Navigation")
-            st.caption("Use buttons below to navigate between pages")
-            
-            # Get current page for highlighting
-            current = st.session_state.current_page
-            
-            # Dashboard
-            dashboard_label = "▶ Dashboard" if current == 'dashboard' else "Dashboard"
-            if st.button(dashboard_label, 
-                        use_container_width=True,
-                        key="nav_dashboard"):
-                st.session_state.current_page = 'dashboard'
-                st.rerun()
-            
-            # Subjects
-            subjects_label = "▶ Subjects" if current in ['subjects', 'subject_detail'] else "Subjects"
-            if st.button(subjects_label, 
-                        use_container_width=True,
-                        key="nav_subjects"):
-                st.session_state.current_page = 'subjects'
-                st.rerun()
-            
-            # Download Manager
-            downloads_label = "▶ Download Manager" if current == 'downloads' else "Download Manager"
-            if st.button(downloads_label, 
-                        use_container_width=True,
-                        key="nav_downloads"):
-                st.session_state.current_page = 'downloads'
-                st.rerun()
-            
-            # QC Dashboard
-            qc_label = "▶ QC Dashboard" if current == 'qc' else "QC Dashboard"
-            if st.button(qc_label, 
-                        use_container_width=True,
-                        key="nav_qc"):
-                st.session_state.current_page = 'qc'
-                st.rerun()
-            
-            # Export
-            export_label = "▶ Export" if current == 'export' else "Export"
-            if st.button(export_label, 
-                        use_container_width=True,
-                        key="nav_export"):
-                st.session_state.current_page = 'export'
-                st.rerun()
-            
-            st.markdown("---")
-            
-            # Manage Datasets (v1.5+)
-            datasets_label = "▶ Manage Datasets" if current == 'manage_datasets' else "📚 Manage Datasets"
-            if st.button(datasets_label,
-                        use_container_width=True,
-                        key="nav_manage_datasets"):
-                st.session_state.current_page = 'manage_datasets'
-                st.rerun()
-            
-            # Settings
-            settings_label = "▶ Settings" if current == 'setup' else "⚙️ Settings"
-            if st.button(settings_label, 
-                        use_container_width=True,
-                        key="nav_settings"):
-                st.session_state.current_page = 'setup'
-                st.rerun()
-            
-            st.markdown("---")
-            st.caption("Current page: " + current)
+        # Navigation - always visible (no setup requirement)
+        st.markdown("### Navigation")
         
-        else:
-            st.info("Complete setup to access features")
+        # Get current page for highlighting
+        current = st.session_state.current_page
+        
+        # Dashboard/Home
+        dashboard_label = "> Home" if current in ['home', 'dashboard'] else "Home"
+        if st.button(dashboard_label, 
+                    use_container_width=True,
+                    key="nav_dashboard"):
+            st.session_state.current_page = 'dashboard'
+            st.rerun()
+        
+        # Manage Datasets (v1.5+) - Moved to top for easy access
+        datasets_label = "> Manage Datasets" if current == 'manage_datasets' else "Manage Datasets"
+        if st.button(datasets_label,
+                    use_container_width=True,
+                    key="nav_manage_datasets"):
+            st.session_state.current_page = 'manage_datasets'
+            st.rerun()
         
         st.markdown("---")
-        st.caption("Data Explorer v1.0.0")
+        
+        # Subjects
+        subjects_label = "> Subjects" if current in ['subjects', 'subject_detail'] else "Subjects"
+        if st.button(subjects_label, 
+                    use_container_width=True,
+                    key="nav_subjects"):
+            st.session_state.current_page = 'subjects'
+            st.rerun()
+        
+        # Viewer
+        viewer_label = "> Viewer" if current == 'viewer' else "Viewer"
+        if st.button(viewer_label, 
+                    use_container_width=True,
+                    key="nav_viewer"):
+            st.session_state.current_page = 'viewer'
+            st.rerun()
+        
+        # QC Dashboard
+        qc_label = "> QC Dashboard" if current == 'qc' else "QC Dashboard"
+        if st.button(qc_label, 
+                    use_container_width=True,
+                    key="nav_qc"):
+            st.session_state.current_page = 'qc'
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Download Manager
+        downloads_label = "> Downloads" if current == 'downloads' else "Downloads"
+        if st.button(downloads_label, 
+                    use_container_width=True,
+                    key="nav_downloads"):
+            st.session_state.current_page = 'downloads'
+            st.rerun()
+        
+        # Data Transfer (v3.1.1+)
+        transfer_label = "> Data Transfer" if current == 'transfer' else "Data Transfer"
+        if st.button(transfer_label, 
+                    use_container_width=True,
+                    key="nav_transfer"):
+            st.session_state.current_page = 'transfer'
+            st.rerun()
+        
+        # Export
+        export_label = "> Export" if current == 'export' else "Export"
+        if st.button(export_label, 
+                    use_container_width=True,
+                    key="nav_export"):
+            st.session_state.current_page = 'export'
+            st.rerun()
+        
+        st.markdown("---")
+        st.caption("BIDSHub v3.1.1")
 
 
 def page_setup():
     """Setup page for first-time configuration."""
     render_breadcrumb('setup')
-    st.markdown('<h1 class="main-header">Data Explorer - Setup</h1>', 
+    st.markdown('<h1 class="main-header">BIDSHub - Setup</h1>', 
                 unsafe_allow_html=True)
     
     st.markdown("""
-    Welcome to Data Explorer! Configure your BIDS dataset and cloud platform connection.
+    Welcome to BIDSHub! Configure your BIDS dataset and cloud platform connection.
     """)
     
     # Platform Selection
@@ -844,8 +1061,8 @@ def page_setup():
             "Choose data platform",
             options=['pennsieve', 'openneuro'],
             format_func=lambda x: {
-                'pennsieve': '🔐 Pennsieve (Private datasets, upload support)',
-                'openneuro': '🌍 OpenNeuro (Public datasets, read-only)'
+                'pennsieve': '[P] Pennsieve (Private datasets, upload support)',
+                'openneuro': '[O] OpenNeuro (Public datasets, read-only)'
             }[x],
             key="platform_selection",
             index=0 if st.session_state.platform == 'pennsieve' else 1
@@ -871,8 +1088,8 @@ def page_setup():
             "Data location",
             options=['cloud_only', 'local'],
             format_func=lambda x: {
-                'cloud_only': '☁️ Cloud only (browse & download remotely)',
-                'local': '💻 Local (BIDS data already on disk)'
+                'cloud_only': '[Cloud] Cloud only (browse & download remotely)',
+                'local': '[L] Local (BIDS data already on disk)'
             }[x],
             key="data_mode",
             index=0
@@ -1022,7 +1239,8 @@ def page_setup():
                     )
                     
                     if not ps_client.verify_connection():
-                        st.error("Failed to connect to Pennsieve!")
+                        st.error(ErrorMessages.format_error('CONNECTION_FAILED', 'pennsieve'))
+                        st.info(ErrorMessages.suggest_fix('CONNECTION_FAILED', 'pennsieve'))
                         return
                 
                 else:  # OpenNeuro
@@ -1030,7 +1248,7 @@ def page_setup():
                     progress_bar.progress(40)
                     
                     if not check_openneuro_connection():
-                        st.warning("Cannot reach OpenNeuro - check internet connection")
+                        st.warning(ErrorMessages.format_error('CONNECTION_FAILED', 'openneuro'))
                     
                     # OpenNeuro agent will be used for downloads (no pre-connection needed)
                     ps_client = None
@@ -1081,6 +1299,13 @@ def page_setup():
                 
                 if data_mode == 'local' and bids_loader:
                     # Index from local BIDS
+                    # Get or create dataset entry
+                    dataset_id = db.add_dataset(
+                        name=dataset_name,
+                        platform='local',
+                        root_path=bids_root
+                    )
+                    
                     for subject in subjects_list:
                         sessions = bids_loader.get_sessions(subject=subject)
                         has_2wk = '2WK' in sessions
@@ -1091,14 +1316,49 @@ def page_setup():
                         
                         db.add_subject(
                             subject_id=subject,
+                            dataset_id=dataset_id,
                             has_2wk=has_2wk,
                             has_6mo=has_6mo,
                             scan_count_2wk=scan_count_2wk,
                             scan_count_6mo=scan_count_6mo
                         )
+                        
+                        # Populate subject_sessions table for dynamic session tracking
+                        for session in sessions:
+                            scans = bids_loader.get_subject_scans(subject, session)
+                            scan_count = len(scans)
+                            
+                            # Add to scans table
+                            for scan in scans:
+                                db.add_scan(
+                                    subject_id=subject,
+                                    dataset_id=dataset_id,
+                                    session=session if session else 'ses-01',
+                                    modality=scan.get('modality', ''),
+                                    file_path=scan.get('file_path', ''),
+                                    suffix=scan.get('suffix', '')
+                                )
+                            
+                            # Add session to subject_sessions table for dynamic session tracking
+                            if scan_count > 0:
+                                db.add_subject_session(
+                                    subject_id=subject,
+                                    dataset_id=dataset_id,
+                                    session_id=session if session else 'ses-01',
+                                    scan_count=scan_count
+                                )
                 else:
                     # Index from remote structure
+                    # Get or create dataset entry
+                    dataset_id = db.add_dataset(
+                        name=dataset_name,
+                        platform=st.session_state.platform,
+                        dataset_id_external=dataset_name,
+                        root_path=bids_root
+                    )
+                    
                     sessions_map = remote_structure.get('sessions', {}) if remote_structure else {}
+                    scans_map = remote_structure.get('scans', {}) if remote_structure else {}
                     
                     for subject in subjects_list:
                         subject_sessions = sessions_map.get(subject, [])
@@ -1107,11 +1367,44 @@ def page_setup():
                         
                         db.add_subject(
                             subject_id=subject,
+                            dataset_id=dataset_id,
                             has_2wk=has_2wk,
                             has_6mo=has_6mo,
                             scan_count_2wk=0,  # Unknown until downloaded
                             scan_count_6mo=0   # Unknown until downloaded
                         )
+                        
+                        # Populate subject_sessions table for dynamic session tracking
+                        # Group scans by session
+                        from collections import defaultdict
+                        session_scan_counts = defaultdict(int)
+                        
+                        # Get scans for this subject from remote structure
+                        subject_scans = scans_map.get(subject, [])
+                        for scan in subject_scans:
+                            session = scan.get('session', '')
+                            if session:
+                                session_scan_counts[session] += 1
+                                
+                                # Add scan to database
+                                db.add_scan(
+                                    subject_id=subject,
+                                    dataset_id=dataset_id,
+                                    session=session,
+                                    modality=scan.get('modality', ''),
+                                    file_path=scan.get('file_path', ''),
+                                    suffix=scan.get('suffix', ''),
+                                    pennsieve_package_id=scan.get('package_id', '')
+                                )
+                        
+                        # Populate subject_sessions table for dynamic session tracking
+                        for session, scan_count in session_scan_counts.items():
+                            db.add_subject_session(
+                                subject_id=subject,
+                                dataset_id=dataset_id,
+                                session_id=session,
+                                scan_count=scan_count
+                            )
                 
                 progress_bar.progress(100)
                 status_text.text("Initialization complete!")
@@ -1167,7 +1460,17 @@ def page_manage_datasets():
         st.info("No datasets configured yet. Add your first dataset below.")
     else:
         for dataset in datasets:
-            with st.expander(f"{'🔐' if dataset['platform'] == 'pennsieve' else '🌍'} {dataset['name']}", 
+            platform_emoji_map = {
+                'pennsieve': '[P]',
+                'openneuro': '[O]',
+                'dandi': '[D]',
+                'xnat': '[X]',
+                'hpc': '[H]',
+                'remote_server': '[R]',
+                'local': '[L]'
+            }
+            
+            with st.expander(f"{platform_emoji_map.get(dataset['platform'], '[Data]')} {dataset['name']}", 
                            expanded=False):
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -1180,8 +1483,8 @@ def page_manage_datasets():
                     st.metric("Platform", dataset['platform'].title())
                 
                 with col3:
-                    status_color = {"active": "🟢", "inactive": "🟡", "error": "🔴"}
-                    st.metric("Status", f"{status_color.get(dataset['status'], '⚪')} {dataset['status'].title()}")
+                    status_color = {"active": "[PASS]", "inactive": "[REVIEW]", "error": "[FAIL]"}
+                    st.metric("Status", f"{status_color.get(dataset['status'], '[INACTIVE]')} {dataset['status'].title()}")
                 
                 with col4:
                     st.metric("Created", dataset['created_date'][:10] if dataset['created_date'] else "Unknown")
@@ -1198,13 +1501,74 @@ def page_manage_datasets():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("🔄 Sync", key=f"sync_{dataset['id']}", 
+                    if st.button("[Sync] Sync", key=f"sync_{dataset['id']}", 
                                use_container_width=True):
-                        st.info("Sync feature coming soon!")
+                        # Sync subjects from platform (v3.1.1+: supports all platforms)
+                        if dataset['platform'] == 'local':
+                            st.info("Local datasets are indexed automatically")
+                        else:
+                            with st.spinner(f"Syncing subjects from {dataset['platform'].title()}..."):
+                                try:
+                                    from src.agent_factory import AgentFactory
+                                    
+                                    factory = AgentFactory(st.session_state.db)
+                                    agent = factory.get_agent(dataset['id'])
+                                    
+                                    if agent:
+                                        # Fetch subjects with metadata
+                                        if dataset['platform'] in ['hpc', 'remote_server']:
+                                            # SSH-based platforms need dataset path
+                                            subjects_data = agent.get_subjects_with_metadata(
+                                                dataset_path=dataset['dataset_id_external']
+                                            )
+                                        else:
+                                            # Cloud platforms (pennsieve, openneuro, dandi, xnat)
+                                            subjects_data = agent.get_subjects_with_metadata(
+                                                dataset.get('dataset_id_external', dataset['name'])
+                                            )
+                                        
+                                        # Index subjects to database
+                                        indexed_count = 0
+                                        for subject_data in subjects_data:
+                                            subject_id = subject_data.get('subject_id')
+                                            
+                                            # Add subject
+                                            db_subject_id = st.session_state.db.add_subject(
+                                                dataset_id=dataset['id'],
+                                                subject_id=subject_id,
+                                                age=subject_data.get('age'),
+                                                sex=subject_data.get('sex'),
+                                                diagnosis=subject_data.get('diagnosis'),
+                                                participant_group=subject_data.get('participant_group')
+                                            )
+                                            
+                                            # Add sessions
+                                            for session in subject_data.get('sessions', []):
+                                                st.session_state.db.add_subject_session(
+                                                    subject_id=subject_id,
+                                                    dataset_id=dataset['id'],
+                                                    session=session
+                                                )
+                                            
+                                            indexed_count += 1
+                                        
+                                        # Update last sync
+                                        st.session_state.db.update_dataset(
+                                            dataset['id'],
+                                            last_sync_date=datetime.now()
+                                        )
+                                        
+                                        st.success(f"[OK] Synced {indexed_count} subjects from {dataset['name']}")
+                                        st.rerun()
+                                    else:
+                                        st.error("Could not create agent for this platform")
+                                except Exception as e:
+                                    st.error(f"Sync failed: {str(e)}")
+                                    logger.error(f"Sync error for dataset {dataset['id']}: {e}")
                 
                 with col2:
                     new_status = "inactive" if dataset['status'] == "active" else "active"
-                    if st.button(f"{'⏸️ Deactivate' if dataset['status'] == 'active' else '▶️ Activate'}", 
+                    if st.button(f"{'[Pause] Deactivate' if dataset['status'] == 'active' else '[Start] Activate'}", 
                                key=f"toggle_{dataset['id']}", 
                                use_container_width=True):
                         st.session_state.db.update_dataset(dataset['id'], status=new_status)
@@ -1212,12 +1576,12 @@ def page_manage_datasets():
                         st.rerun()
                 
                 with col3:
-                    if st.button("🗑️ Remove", key=f"remove_{dataset['id']}", 
+                    if st.button("[Delete] Remove", key=f"remove_{dataset['id']}", 
                                use_container_width=True,
                                type="secondary"):
                         # Confirm deletion
                         if len(subjects) > 0:
-                            st.warning(f"⚠️ This will delete {len(subjects)} subjects and all associated data!")
+                            st.warning(f"[WARNING] This will delete {len(subjects)} subjects and all associated data!")
                             if st.button(f"Confirm Delete", key=f"confirm_delete_{dataset['id']}",
                                        type="primary"):
                                 st.session_state.db.delete_dataset(dataset['id'])
@@ -1228,34 +1592,91 @@ def page_manage_datasets():
                             st.success("Dataset removed")
                             st.rerun()
     
+    # Database maintenance section (v3.1.1+)
+    st.markdown("---")
+    st.markdown('<h2 class="section-header"> Database Maintenance</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("[Search] Check Integrity", use_container_width=True):
+            with st.spinner("Checking database integrity..."):
+                issues = st.session_state.db.check_integrity()
+                total_issues = sum(issues.values())
+                
+                if total_issues == 0:
+                    st.success("[OK] Database is clean - no integrity issues found")
+                else:
+                    st.warning(f"[WARNING] Found {total_issues} integrity issue(s):")
+                    for issue_type, count in issues.items():
+                        if count > 0:
+                            st.markdown(f"- **{issue_type.replace('_', ' ').title()}**: {count}")
+                    
+                    st.session_state.integrity_issues = issues
+                    st.session_state.show_integrity_warning = True
+    
+    with col2:
+        if st.button(" Run Maintenance", use_container_width=True,
+                    disabled=not st.session_state.get('integrity_issues')):
+            with st.spinner("Running database maintenance..."):
+                report = st.session_state.db.run_integrity_maintenance(auto_fix=True)
+                
+                if report['status'] == 'fixed':
+                    st.success("[OK] Database maintenance complete!")
+                    
+                    fixes = report.get('fixes_applied', {})
+                    if fixes:
+                        st.markdown("**Fixes Applied:**")
+                        for fix_type, count in fixes.items():
+                            if isinstance(count, dict):
+                                for sub_type, sub_count in count.items():
+                                    if sub_count > 0:
+                                        st.markdown(f"- {sub_type.replace('_', ' ').title()}: {sub_count}")
+                            elif count > 0:
+                                st.markdown(f"- {fix_type.replace('_', ' ').title()}: {count}")
+                    
+                    st.session_state.integrity_issues = None
+                    st.session_state.show_integrity_warning = False
+                    st.rerun()
+    
     # Add new dataset section
     st.markdown("---")
     st.markdown('<h2 class="section-header">Add New Dataset</h2>', 
                 unsafe_allow_html=True)
     
     if len(datasets) >= 5:
-        st.warning("⚠️ Maximum of 5 datasets supported in v1.5.")
+        st.warning("[WARNING] Maximum of 5 datasets supported in v1.5.")
         return
     
-    # Platform selection
+    # Platform selection (v3.1.1+: Added HPC and Remote Server)
     col1, col2 = st.columns(2)
     
     with col1:
-        new_platform = st.radio(
+        new_platform = st.selectbox(
             "Platform",
-            options=['pennsieve', 'openneuro'],
+            options=['pennsieve', 'openneuro', 'dandi', 'xnat', 'hpc', 'remote_server'],
             format_func=lambda x: {
-                'pennsieve': '🔐 Pennsieve',
-                'openneuro': '🌍 OpenNeuro'
-            }[x],
+                'pennsieve': '[P] Pennsieve',
+                'openneuro': '[O] OpenNeuro',
+                'dandi': '[D] DANDI',
+                'xnat': '[X] XNAT',
+                'hpc': '[H] HPC Cluster',
+                'remote_server': '[R] Remote Server (SSH)'
+            }.get(x, x.title()),
             key="new_dataset_platform"
         )
     
     with col2:
-        if new_platform == 'pennsieve':
-            st.info("Private datasets with upload support")
-        else:
-            st.info("Public datasets, read-only")
+        platform_descriptions = {
+            'pennsieve': "Private datasets with upload support",
+            'openneuro': "Public neuroimaging datasets",
+            'dandi': "Public cellular neurophysiology datasets",
+            'xnat': "Institutional imaging archives",
+            'hpc': "HPC cluster via SSH/SFTP",
+            'remote_server': "Generic remote server via SSH/SFTP"
+        }
+        st.info(platform_descriptions.get(new_platform, "Data platform"))
     
     # Dataset configuration form
     with st.form("add_dataset_form"):
@@ -1266,6 +1687,9 @@ def page_manage_datasets():
         )
         
         col1, col2 = st.columns(2)
+        
+        # Platform-specific configuration
+        server_url = None
         
         if new_platform == 'pennsieve':
             with col1:
@@ -1287,7 +1711,8 @@ def page_manage_datasets():
                 placeholder="TrackTBI",
                 help="Name of dataset on Pennsieve"
             )
-        else:
+        
+        elif new_platform == 'openneuro':
             external_id = st.text_input(
                 "OpenNeuro Dataset ID",
                 placeholder="ds000246",
@@ -1302,6 +1727,127 @@ def page_manage_datasets():
             
             api_secret = None
         
+        elif new_platform == 'dandi':
+            external_id = st.text_input(
+                "DANDI Dandiset ID",
+                placeholder="000001",
+                help="Dandiset ID from DANDI (e.g., 000001)"
+            )
+            
+            api_key = st.text_input(
+                "API Token (optional)",
+                type="password",
+                help="Only needed for embargoed dandisets"
+            )
+            
+            api_secret = None
+        
+        elif new_platform == 'xnat':
+            server_url = st.text_input(
+                "XNAT Server URL",
+                placeholder="https://xnat.example.edu",
+                help="URL of your XNAT server"
+            )
+            
+            external_id = st.text_input(
+                "XNAT Project ID",
+                placeholder="PROJECT_001",
+                help="Project ID in XNAT"
+            )
+            
+            with col1:
+                api_key = st.text_input(
+                    "XNAT Username",
+                    help="Your XNAT username"
+                )
+            
+            with col2:
+                api_secret = st.text_input(
+                    "XNAT Password",
+                    type="password",
+                    help="Your XNAT password"
+                )
+        
+        elif new_platform == 'hpc':
+            server_url = st.text_input(
+                "HPC Hostname",
+                placeholder="hpc.institution.edu",
+                help="Hostname of your HPC cluster"
+            )
+            
+            external_id = st.text_input(
+                "Dataset Path on HPC",
+                placeholder="/data/bids/my_dataset",
+                help="Full path to BIDS dataset on HPC"
+            )
+            
+            with col1:
+                api_key = st.text_input(
+                    "SSH Username",
+                    help="Your SSH username for HPC"
+                )
+            
+            with col2:
+                auth_method = st.radio(
+                    "Authentication",
+                    options=['password', 'ssh_key'],
+                    format_func=lambda x: 'Password' if x == 'password' else 'SSH Key File'
+                )
+            
+            if auth_method == 'password':
+                api_secret = st.text_input(
+                    "SSH Password",
+                    type="password",
+                    help="Your SSH password"
+                )
+            else:
+                api_secret = None
+                ssh_key_path = st.text_input(
+                    "SSH Private Key Path",
+                    placeholder=str(Path.home() / ".ssh" / "id_rsa"),
+                    help="Path to your SSH private key file"
+                )
+        
+        elif new_platform == 'remote_server':
+            server_url = st.text_input(
+                "Server Hostname or IP",
+                placeholder="data.lab.edu or 192.168.1.100",
+                help="Hostname or IP address of remote server"
+            )
+            
+            external_id = st.text_input(
+                "Dataset Path on Server",
+                placeholder="/mnt/data/bids_datasets/my_dataset",
+                help="Full path to BIDS dataset on remote server"
+            )
+            
+            with col1:
+                api_key = st.text_input(
+                    "SSH Username",
+                    help="Your SSH username"
+                )
+            
+            with col2:
+                auth_method = st.radio(
+                    "Authentication",
+                    options=['password', 'ssh_key'],
+                    format_func=lambda x: 'Password' if x == 'password' else 'SSH Key File'
+                )
+            
+            if auth_method == 'password':
+                api_secret = st.text_input(
+                    "SSH Password",
+                    type="password",
+                    help="Your SSH password"
+                )
+            else:
+                api_secret = None
+                ssh_key_path = st.text_input(
+                    "SSH Private Key Path",
+                    placeholder=str(Path.home() / ".ssh" / "id_rsa"),
+                    help="Path to your SSH private key file"
+                )
+        
         root_path = st.text_input(
             "Local Working Directory",
             placeholder=str(Path.home() / "data-explorer" / "datasets" / dataset_name),
@@ -1314,16 +1860,40 @@ def page_manage_datasets():
             help="Check if dataset follows BIDS specification"
         )
         
-        submit = st.form_submit_button("➕ Add Dataset", type="primary", use_container_width=True)
+        submit = st.form_submit_button("[+] Add Dataset", type="primary", use_container_width=True)
         
         if submit:
-            # Validate inputs
+            # Validate inputs based on platform
+            validation_error = None
+            
             if not dataset_name:
-                st.error("Dataset name is required")
+                validation_error = "Dataset name is required"
             elif not external_id:
-                st.error(f"{'Pennsieve dataset name' if new_platform == 'pennsieve' else 'OpenNeuro dataset ID'} is required")
+                error_messages = {
+                    'pennsieve': 'Pennsieve dataset name is required',
+                    'openneuro': 'OpenNeuro dataset ID is required',
+                    'dandi': 'DANDI dandiset ID is required',
+                    'xnat': 'XNAT project ID is required',
+                    'hpc': 'Dataset path on HPC is required',
+                    'remote_server': 'Dataset path on server is required'
+                }
+                validation_error = error_messages.get(new_platform, 'Dataset ID/Path is required')
             elif new_platform == 'pennsieve' and (not api_key or not api_secret):
-                st.error("Pennsieve credentials (API key and secret) are required")
+                validation_error = "Pennsieve credentials (API key and secret) are required"
+            elif new_platform in ['xnat', 'hpc', 'remote_server']:
+                if not server_url:
+                    validation_error = f"{new_platform.upper()} server URL/hostname is required"
+                elif not api_key:
+                    validation_error = "SSH/XNAT username is required"
+                elif new_platform in ['hpc', 'remote_server'] and auth_method == 'password' and not api_secret:
+                    validation_error = "SSH password is required (or provide SSH key)"
+                elif new_platform in ['hpc', 'remote_server'] and auth_method == 'ssh_key' and not ssh_key_path:
+                    validation_error = "SSH key file path is required"
+                elif new_platform == 'xnat' and not api_secret:
+                    validation_error = "XNAT password is required"
+            
+            if validation_error:
+                st.error(validation_error)
             else:
                 # Check if name already exists
                 existing = [d for d in datasets if d['name'] == dataset_name]
@@ -1337,18 +1907,25 @@ def page_manage_datasets():
                             is_valid, validation_msg = validate_bids_dataset(root_path)
                             
                             if not is_valid:
-                                st.warning("⚠️ BIDS Validation Issues:")
+                                st.warning("[WARNING] BIDS Validation Issues:")
                                 st.text(validation_msg)
+                                st.info(ErrorMessages.suggest_fix('NOT_BIDS_COMPLIANT', None))
                                 
                                 if st.checkbox("Add dataset anyway (not recommended)"):
                                     validation_passed = True
                                 else:
                                     validation_passed = False
-                                    st.error("❌ Please fix BIDS validation errors before adding dataset.")
+                                    st.error(ErrorMessages.NOT_BIDS_COMPLIANT)
                             else:
-                                st.success("✅ BIDS validation passed!")
+                                st.success("[OK] BIDS validation passed!")
                     
                     if validation_passed:
+                        # Prepare root_path: For SSH key auth, store key path; otherwise store working dir
+                        final_root_path = root_path if root_path else None
+                        
+                        if new_platform in ['hpc', 'remote_server'] and auth_method == 'ssh_key':
+                            final_root_path = ssh_key_path  # Store SSH key path for agent
+                        
                         # Add dataset to database
                         dataset_id = st.session_state.db.add_dataset(
                             name=dataset_name,
@@ -1356,13 +1933,104 @@ def page_manage_datasets():
                             api_key=api_key if api_key else None,
                             api_secret=api_secret if api_secret else None,
                             dataset_id_external=external_id,
-                            root_path=root_path if root_path else None
+                            root_path=final_root_path,
+                            server_url=server_url if server_url else None
                         )
                         
                         if dataset_id:
-                            st.success(f"✓ Dataset '{dataset_name}' added successfully!")
-                            st.info("Go to Setup page to initialize this dataset with subjects.")
-                            st.rerun()
+                            st.success(f"[OK] Dataset '{dataset_name}' added successfully!")
+                            
+                            # For local datasets, index subjects immediately
+                            if data_location_mode == 'local' and root_path:
+                                with st.spinner("Indexing local BIDS dataset..."):
+                                    try:
+                                        from src.bids_loader import BIDSLoader
+                                        
+                                        # Load BIDS layout
+                                        bids_loader = BIDSLoader(root_path)
+                                        subjects_list = bids_loader.get_subjects()
+                                        
+                                        indexed_count = 0
+                                        for subject in subjects_list:
+                                            sessions = bids_loader.get_sessions(subject)
+                                            
+                                            # Add subject to database
+                                            st.session_state.db.add_subject(
+                                                dataset_id=dataset_id,
+                                                subject_id=subject,
+                                                local_subject_id=subject
+                                            )
+                                            
+                                            # Add scans for each session AND populate subject_sessions table
+                                            for session in sessions:
+                                                scans = bids_loader.get_subject_scans(subject, session)
+                                                
+                                                # Count scans for this session
+                                                scan_count = len(scans)
+                                                
+                                                for scan in scans:
+                                                    st.session_state.db.add_scan(
+                                                        dataset_id=dataset_id,
+                                                        subject_id=subject,
+                                                        session=session if session else 'ses-01',
+                                                        modality=scan['modality'],
+                                                        suffix=scan.get('suffix', ''),
+                                                        file_path=scan['file_path'],
+                                                        file_size_bytes=scan.get('size', 0),
+                                                        is_downloaded=True
+                                                    )
+                                                
+                                                # Add session to subject_sessions table for dynamic session tracking
+                                                if scan_count > 0:
+                                                    st.session_state.db.add_subject_session(
+                                                        subject_id=subject,
+                                                        dataset_id=dataset_id,
+                                                        session_id=session if session else 'ses-01',
+                                                        scan_count=scan_count
+                                                    )
+                                            
+                                            indexed_count += 1
+                                        
+                                        st.success(f"Indexed {indexed_count} subjects from local dataset")
+                                        
+                                        # Next steps for local datasets
+                                        st.markdown("**What's next?**")
+                                        col1, col2 = st.columns(2)
+                                        
+                                        with col1:
+                                            if st.button("Browse Subjects", type="primary", use_container_width=True, key="goto_subjects_local"):
+                                                st.session_state.current_page = 'subjects'
+                                                st.rerun()
+                                        
+                                        with col2:
+                                            if st.button("View Dashboard", use_container_width=True, key="goto_dashboard_local"):
+                                                st.session_state.current_page = 'dashboard'
+                                                st.rerun()
+                                        
+                                    except Exception as e:
+                                        st.error(f"Error indexing local dataset: {str(e)}")
+                                        st.warning("Dataset added but subjects not indexed. Check BIDS structure.")
+                            else:
+                                # Cloud dataset - needs sync
+                                st.info("For cloud datasets, go to 'Subjects' page and click 'Sync Subjects' to fetch metadata from the platform.")
+                                
+                                # Next steps for cloud datasets
+                                st.markdown("**What's next?**")
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    if st.button("Sync Subjects", type="primary", use_container_width=True, key="goto_subjects_cloud"):
+                                        st.session_state.current_page = 'subjects'
+                                        st.rerun()
+                                
+                                with col2:
+                                    if st.button("View Dashboard", use_container_width=True, key="goto_dashboard_cloud"):
+                                        st.session_state.current_page = 'dashboard'
+                                        st.rerun()
+                                
+                                with col3:
+                                    if st.button("Manage Datasets", use_container_width=True, key="goto_manage_cloud"):
+                                        st.rerun()
                         else:
                             st.error("Failed to add dataset. Check database connection.")
 
@@ -1370,8 +2038,21 @@ def page_manage_datasets():
 def page_dashboard():
     """Main dashboard page."""
     render_breadcrumb('dashboard')
-    st.markdown('<h1 class="main-header">Data Explorer</h1>', 
+    st.markdown('<h1 class="main-header">BIDSHub</h1>', 
                 unsafe_allow_html=True)
+    
+    # Show integrity warning if issues detected (v3.1.1+)
+    if st.session_state.get('show_integrity_warning', False):
+        issues = st.session_state.get('integrity_issues', {})
+        total_issues = sum(issues.values())
+        
+        if total_issues > 0:
+            with st.expander(f"[WARNING] Database Integrity Alert: {total_issues} issue(s) detected", expanded=True):
+                for issue_type, count in issues.items():
+                    if count > 0:
+                        st.markdown(f"- **{issue_type.replace('_', ' ').title()}**: {count}")
+                
+                st.markdown("Go to **Manage Datasets** to run database maintenance.")
     
     if not st.session_state.db:
         st.warning("Please complete setup to view the dashboard")
@@ -1475,10 +2156,19 @@ def page_subjects():
         st.markdown('<h2 class="section-header">Dataset Filter</h2>', 
                     unsafe_allow_html=True)
         
+        platform_emojis = {
+            'pennsieve': '[P]',
+            'openneuro': '[O]',
+            'dandi': '[D]',
+            'xnat': '[X]',
+            'hpc': '[H]',
+            'remote_server': '[R]'
+        }
+        
         selected_dataset_ids = st.multiselect(
             "Show subjects from:",
             options=[d['id'] for d in datasets],
-            format_func=lambda x: next((f"{'🔐' if d['platform'] == 'pennsieve' else '🌍'} {d['name']}" 
+            format_func=lambda x: next((f"{platform_emojis.get(d['platform'], '[Data]')} {d['name']}" 
                                        for d in datasets if d['id'] == x), str(x)),
             default=[d['id'] for d in datasets],
             key="subject_dataset_filter"
@@ -1526,10 +2216,23 @@ def page_subjects():
         filters['qc_status'] = qc_filter
     
     # Get subjects from selected datasets (v1.5+)
+    # Use caching for better performance (v3.1.1+)
+    cache = st.session_state.get('cache_manager')
+    
     subjects = []
     if len(datasets) > 1 and selected_dataset_ids:
         for dataset_id in selected_dataset_ids:
-            dataset_subjects = st.session_state.db.get_subjects_by_dataset(dataset_id)
+            cache_key = f"subjects_{dataset_id}"
+            
+            if cache:
+                dataset_subjects = cache.cached_query(
+                    cache_key,
+                    st.session_state.db.get_subjects_by_dataset,
+                    dataset_id
+                )
+            else:
+                dataset_subjects = st.session_state.db.get_subjects_by_dataset(dataset_id)
+            
             # Add dataset info to each subject
             for subj in dataset_subjects:
                 dataset = st.session_state.db.get_dataset(dataset_id)
@@ -1551,15 +2254,64 @@ def page_subjects():
     
     filtered_subjects = filter_subjects(subjects, filter_criteria)
     
-    # Display count
-    st.caption(f"Showing {len(filtered_subjects)} of {len(subjects)} subjects")
+    # Pagination (v3.1.1+)
+    total_subjects = len(filtered_subjects)
+    per_page = st.session_state.subjects_per_page
+    total_pages = (total_subjects + per_page - 1) // per_page if total_subjects > 0 else 1
+    current_page = st.session_state.current_page_num
+    
+    # Ensure current page is valid
+    if current_page > total_pages:
+        st.session_state.current_page_num = 1
+        current_page = 1
+    
+    start_idx = (current_page - 1) * per_page
+    end_idx = min(start_idx + per_page, total_subjects)
+    paginated_subjects = filtered_subjects[start_idx:end_idx]
+    
+    # Display count with pagination
+    st.caption(f"Showing {start_idx + 1}-{end_idx} of {total_subjects} subjects (Page {current_page}/{total_pages})")
     
     if not filtered_subjects:
         st.info("No subjects match the filters")
         return
     
-    # Create DataFrame for display
-    df = create_subject_dataframe(filtered_subjects)
+    # Pagination controls
+    if total_pages > 1:
+        col1, col2, col3, col4 = st.columns([1, 1, 2, 1])
+        with col1:
+            if st.button("◀ Previous", disabled=(current_page == 1)):
+                st.session_state.current_page_num = current_page - 1
+                st.rerun()
+        with col2:
+            if st.button("Next >", disabled=(current_page == total_pages)):
+                st.session_state.current_page_num = current_page + 1
+                st.rerun()
+        with col3:
+            page_num = st.number_input(
+                "Go to page:",
+                min_value=1,
+                max_value=total_pages,
+                value=current_page,
+                key="page_number_input"
+            )
+            if page_num != current_page:
+                st.session_state.current_page_num = page_num
+                st.rerun()
+        with col4:
+            per_page_select = st.selectbox(
+                "Per page:",
+                options=[25, 50, 100, 200],
+                index=1,
+                key="per_page_select"
+            )
+            if per_page_select != st.session_state.subjects_per_page:
+                st.session_state.subjects_per_page = per_page_select
+                st.session_state.current_page_num = 1
+                st.rerun()
+    
+    # Create DataFrame for display (paginated)
+    df = create_subject_dataframe(paginated_subjects)
     
     # Display table with selection
     st.dataframe(
@@ -1573,7 +2325,7 @@ def page_subjects():
     st.markdown("---")
     st.markdown("### View Subject Details")
     
-    subject_ids = [s['subject_id'] for s in filtered_subjects]
+    subject_ids = [s['subject_id'] for s in paginated_subjects]
     selected = st.selectbox(
         "Select subject to view",
         options=subject_ids,
@@ -1611,31 +2363,120 @@ def page_downloads():
         st.warning("Please complete setup first")
         return
     
-    # Initialize download manager in session state
+    # Initialize agent factory and download manager (v3.1.1+: with multi-platform destination)
+    if 'agent_factory' not in st.session_state:
+        from src.agent_factory import AgentFactory
+        st.session_state.agent_factory = AgentFactory(st.session_state.db)
+    
     if 'download_manager' not in st.session_state:
         from src.download_manager import DownloadManager
         st.session_state.download_manager = DownloadManager(
             ps_client=st.session_state.ps_client,
             database=st.session_state.db,
-            max_concurrent=3
+            max_concurrent=3,
+            agent_factory=st.session_state.agent_factory,
+            upload_destination=None
         )
     
     dm = st.session_state.download_manager
     
-    # Initialize Metadata Filter (v1.5+ supports multi-dataset)
+    # Update download destination based on user selection (v3.1.1+: Multi-platform)
+    dest_type = st.session_state.get('download_destination_type', 'local')
+    dest_dataset_id = st.session_state.get('download_dest_dataset_id')
+    dest_platform = st.session_state.get('download_dest_platform')
+    
+    if dest_type == 'local_and_platform' and dest_dataset_id and dest_platform:
+        dm.set_upload_destination({
+            'platform': dest_platform,
+            'dataset_id': dest_dataset_id
+        })
+    else:
+        dm.set_upload_destination(None)
+    
+    # Initialize Metadata Filter (v1.5+ supports multi-dataset, v3.0+ adds database)
     if 'metadata_filter' not in st.session_state:
         datasets = st.session_state.db.get_all_datasets(status='active')
         if datasets and len(datasets) > 1:
             # Multi-dataset mode
-            st.session_state.metadata_filter = MetadataFilter(datasets=datasets)
+            st.session_state.metadata_filter = MetadataFilter(
+                datasets=datasets, 
+                database=st.session_state.db
+            )
         else:
             # Single dataset mode (backwards compatibility)
-            st.session_state.metadata_filter = MetadataFilter(st.session_state.bids_root)
+            st.session_state.metadata_filter = MetadataFilter(
+                st.session_state.bids_root,
+                database=st.session_state.db
+            )
     
     metadata_filter = st.session_state.metadata_filter
     
+    # Download Destination Selector (v3.1.1+: Multi-platform support)
+    st.markdown('<h2 class="section-header">[Folder] Download Destination</h2>', 
+                unsafe_allow_html=True)
+    
+    st.info("Choose where to save downloaded data - local storage only, or push directly to another platform")
+    
+    # Destination options
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        dest_type = st.radio(
+            "Destination Type",
+            options=['local', 'local_and_platform'],
+            format_func=lambda x: 'Local Only' if x == 'local' else 'Local + Upload to Platform',
+            key='download_destination_type',
+            help="Choose whether to keep data local or also push to another platform"
+        )
+    
+    with col2:
+        if dest_type == 'local_and_platform':
+            # Get all datasets that support uploads (v3.1.1+: all platforms except openneuro, dandi)
+            all_datasets = st.session_state.db.get_all_datasets(status='active')
+            upload_platforms = ['pennsieve', 'xnat', 'hpc', 'remote_server']
+            upload_capable_datasets = [ds for ds in all_datasets if ds['platform'] in upload_platforms]
+            
+            if not upload_capable_datasets:
+                st.warning("No upload-capable datasets configured. Add Pennsieve, XNAT, HPC, or Remote Server dataset in Manage Datasets.")
+                st.session_state.download_dest_dataset_id = None
+                st.session_state.download_dest_platform = None
+            else:
+                # Platform emojis for display
+                platform_emojis = {
+                    'pennsieve': '[P]',
+                    'xnat': '[X]',
+                    'hpc': '[H]',
+                    'remote_server': '[R]'
+                }
+                
+                dest_dataset_options = {
+                    f"{platform_emojis.get(ds['platform'], '[Data]')} {ds['name']} ({ds['platform'].upper()})": ds['id'] 
+                    for ds in upload_capable_datasets
+                }
+                
+                selected_dest_display = st.selectbox(
+                    "Target Upload Destination",
+                    options=list(dest_dataset_options.keys()),
+                    key='download_dest_dataset_display',
+                    help="Data will be uploaded to this platform after downloading locally"
+                )
+                
+                selected_dest_id = dest_dataset_options[selected_dest_display]
+                selected_dataset = st.session_state.db.get_dataset(selected_dest_id)
+                
+                st.session_state.download_dest_dataset_id = selected_dest_id
+                st.session_state.download_dest_platform = selected_dataset['platform']
+                st.session_state.download_dest_name = selected_dataset['name']
+                
+                st.caption(f"[OK] Downloads will be pushed to: {selected_dataset['name']} ({selected_dataset['platform'].upper()})")
+        else:
+            st.session_state.download_dest_dataset_id = None
+            st.session_state.download_dest_platform = None
+    
+    st.markdown("---")
+    
     # Metadata Filtering Section
-    st.markdown('<h2 class="section-header">🎯 Filter by Metadata</h2>', 
+    st.markdown('<h2 class="section-header">[Filter] Filter by Metadata</h2>', 
                 unsafe_allow_html=True)
     
     if metadata_filter.is_available():
@@ -1682,18 +2523,79 @@ def page_downloads():
             if selected_dx and len(selected_dx) < len(dx_values):
                 filter_criteria['diagnosis'] = selected_dx
         
+        # Keyword search (v3.0+ - useful for datasets with sparse metadata)
+        st.markdown("---")
+        st.markdown("**Additional Filters** (for datasets with limited metadata)")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            keyword_input = st.text_input(
+                "Keywords (comma-separated)",
+                placeholder="e.g., epilepsy, TBI, hippocampal sclerosis",
+                key="filter_keywords",
+                help="Searches dataset descriptions, subject IDs, and scan filenames"
+            )
+            
+            if keyword_input:
+                keywords = [kw.strip() for kw in keyword_input.split(',') if kw.strip()]
+                filter_criteria['keywords'] = keywords
+        
+        with col2:
+            modality_options = ['T1w', 'T2w', 'FLAIR', 'DWI', 'ASL', 'SWI', 'bold', 'dwi', 'PDw']
+            selected_modalities = st.multiselect(
+                "MRI Modalities",
+                options=modality_options,
+                key="filter_modalities",
+                help="Filter by specific MRI sequence types"
+            )
+            
+            if selected_modalities:
+                filter_criteria['modalities'] = selected_modalities
+        
         # Preview filtered results
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📊 Preview Filtered Results", use_container_width=True):
+            if st.button("[Data] Preview Filtered Results", use_container_width=True):
+                # Apply demographic filters first
                 filtered_ids = metadata_filter.filter_subjects(filter_criteria)
-                summary = metadata_filter.get_filter_summary(filter_criteria)
+                
+                # Extract demographic criteria (without keywords/modalities)
+                demographic_criteria = {k: v for k, v in filter_criteria.items() 
+                                      if k not in ['keywords', 'modalities']}
+                summary = metadata_filter.get_filter_summary(demographic_criteria)
+                
+                # Apply keyword filter (intersect with demographic results)
+                if 'keywords' in filter_criteria:
+                    keyword_matches = metadata_filter.filter_by_keywords(filter_criteria['keywords'])
+                    keyword_ids = [(m['subject_id'], m['dataset_id']) for m in keyword_matches]
+                    
+                    # Intersect with demographic results
+                    if filtered_ids:
+                        filtered_ids = [sid for sid in filtered_ids if sid in keyword_ids]
+                    else:
+                        filtered_ids = keyword_ids
+                    
+                    st.info(f"[Search] Keyword search: found {len(keyword_matches)} matches for {', '.join(filter_criteria['keywords'])}")
+                
+                # Apply modality filter (intersect with previous results)
+                if 'modalities' in filter_criteria:
+                    modality_matches = metadata_filter.filter_by_modalities(filter_criteria['modalities'])
+                    modality_ids = [(m['subject_id'], m['dataset_id']) for m in modality_matches]
+                    
+                    # Intersect with previous results
+                    if filtered_ids:
+                        filtered_ids = [sid for sid in filtered_ids if sid in modality_ids]
+                    else:
+                        filtered_ids = modality_ids
+                    
+                    st.info(f"[D] Modality filter: found {len(modality_matches)} subjects with {', '.join(filter_criteria['modalities'])}")
                 
                 st.session_state.filtered_subject_ids = filtered_ids
                 st.session_state.filter_active = True
                 
-                st.success(f"✓ {len(filtered_ids)} subjects match your criteria")
+                st.success(f"[OK] {len(filtered_ids)} subjects match your criteria")
                 
                 if summary['demographics']:
                     with st.expander("View Demographics"):
@@ -1706,7 +2608,7 @@ def page_downloads():
                             st.write(f"**Diagnosis**: {summary['demographics']['diagnosis']}")
         
         with col2:
-            if st.button("🗑️ Clear Filters", use_container_width=True):
+            if st.button("[Delete] Clear Filters", use_container_width=True):
                 st.session_state.filtered_subject_ids = None
                 st.session_state.filter_active = False
                 st.rerun()
@@ -1729,11 +2631,36 @@ def page_downloads():
                 filter_text.append(f"Sex: {', '.join(filter_criteria['sex'])}")
             if 'diagnosis' in filter_criteria:
                 filter_text.append(f"Diagnosis: {', '.join(filter_criteria['diagnosis'])}")
+            if 'keywords' in filter_criteria:
+                filter_text.append(f"Keywords: {', '.join(filter_criteria['keywords'])}")
+            if 'modalities' in filter_criteria:
+                filter_text.append(f"Modalities: {', '.join(filter_criteria['modalities'])}")
             
             if filter_text:
                 st.caption(f"**Active filters**: {' | '.join(filter_text)}")
     else:
         st.warning("No participants.tsv found - metadata filtering unavailable")
+    
+    st.markdown("---")
+    
+    # Download Destination Status (v3.1.1+: Multi-platform)
+    if dest_type == 'local_and_platform' and dest_dataset_id:
+        dest_dataset = st.session_state.db.get_dataset(dest_dataset_id)
+        if dest_dataset:
+            platform_emojis = {
+                'pennsieve': '[P]',
+                'xnat': '[X]',
+                'hpc': '[H]',
+                'remote_server': '[R]'
+            }
+            platform_emoji = platform_emojis.get(dest_dataset['platform'], '')
+            platform_display = dest_dataset['platform'].upper()
+            
+            st.success(f"{platform_emoji} Active Destination: Downloads will be pushed to **{dest_dataset['name']}** ({platform_display})")
+        else:
+            st.error("Invalid destination dataset selected")
+    else:
+        st.info("[L] Active Destination: Downloads saved to local storage only")
     
     st.markdown("---")
     
@@ -1783,7 +2710,7 @@ def page_downloads():
     filtered_ids = st.session_state.get('filtered_subject_ids', None)
     
     if filter_active and filtered_ids:
-        st.caption(f"🎯 Filters active: {len(filtered_ids)} subjects selected")
+        st.caption(f"[Filter] Filters active: {len(filtered_ids)} subjects selected")
     
     col1, col2, col3 = st.columns(3)
     
@@ -1808,9 +2735,17 @@ def page_downloads():
             else:
                 for subject in subjects:
                     subject_id = subject['subject_id']
+                    dataset_id = subject.get('dataset_id')
                     
-                    # Get scans for both sessions
-                    for session in ['2WK', '6MO']:
+                    # Get all available sessions for this subject's dataset (dynamic)
+                    available_sessions = get_available_sessions(dataset_id)
+                    
+                    # If no sessions from metadata, try getting from BIDS loader
+                    if not available_sessions:
+                        available_sessions = bids_loader.get_sessions(subject_id)
+                    
+                    # Get scans for all sessions (dynamic)
+                    for session in available_sessions:
                         scans = bids_loader.get_subject_scans(subject_id, session)
                         
                         for scan in scans:
@@ -1862,17 +2797,29 @@ def page_downloads():
             else:
                 for subject in subjects:
                     subject_id = subject['subject_id']
+                    dataset_id = subject.get('dataset_id')
                     
-                    # Check if subject has both sessions
-                    has_2wk = subject.get('has_2wk', False)
-                    has_6mo = subject.get('has_6mo', False)
+                    # Check if subject has 2+ sessions (dynamic completeness definition)
+                    sessions_info = st.session_state.db.get_subject_sessions(subject_id, dataset_id)
                     
-                    if not (has_2wk and has_6mo):
+                    # Fallback: get sessions from BIDS loader if not in database
+                    if not sessions_info:
+                        subject_sessions = bids_loader.get_sessions(subject_id)
+                        is_complete = len(subject_sessions) >= 2
+                    else:
+                        is_complete = len(sessions_info) >= 2
+                    
+                    if not is_complete:
                         incomplete_count += 1
                         continue
                     
-                    # Add scans from both sessions
-                    for session in ['2WK', '6MO']:
+                    # Get all available sessions for this subject (dynamic)
+                    available_sessions = get_available_sessions(dataset_id)
+                    if not available_sessions:
+                        available_sessions = bids_loader.get_sessions(subject_id)
+                    
+                    # Add scans from all sessions (dynamic)
+                    for session in available_sessions:
                         scans = bids_loader.get_subject_scans(subject_id, session)
                         
                         for scan in scans:
@@ -1944,7 +2891,7 @@ def page_downloads():
         )
         
         # Individual item management
-        with st.expander("🗑️ Manage Individual Items"):
+        with st.expander("[Delete] Manage Individual Items"):
             col1, col2 = st.columns(2)
             
             with col1:
@@ -2060,7 +3007,7 @@ def page_downloads():
     
     # Download History
     st.markdown("---")
-    st.markdown('<h2 class="section-header">📜 Download & Upload History</h2>', 
+    st.markdown('<h2 class="section-header"> Download & Upload History</h2>', 
                 unsafe_allow_html=True)
     
     # Get recent sessions from metadata table
@@ -2081,7 +3028,7 @@ def page_downloads():
                     session_type = 'Download' if 'download_session_' in session['key'] else 'Upload'
                     
                     history_data.append({
-                        'Type': f"{'⬇️' if session_type == 'Download' else '⬆️'} {session_type}",
+                        'Type': f"{'[Download]' if session_type == 'Download' else '[Upload]'} {session_type}",
                         'Platform': session_data.get('platform', 'Unknown').title(),
                         'Timestamp': session_data.get('timestamp', session['created_date'])[:19],
                         'Success': session_data.get('successful', 0),
@@ -2093,11 +3040,11 @@ def page_downloads():
                     pass
             
             if history_data:
-                with st.expander("📊 View Recent Sessions", expanded=False):
+                with st.expander("[Data] View Recent Sessions", expanded=False):
                     history_df = pd.DataFrame(history_data)
                     st.dataframe(history_df, use_container_width=True, hide_index=True)
                     
-                    if st.button("🗑️ Clear History", key="clear_history"):
+                    if st.button("[Delete] Clear History", key="clear_history"):
                         st.session_state.db.execute_query("""
                             DELETE FROM metadata 
                             WHERE key LIKE 'download_session_%' OR key LIKE 'upload_session_%'
@@ -2111,7 +3058,7 @@ def page_downloads():
     
     # Settings
     st.markdown("---")
-    st.markdown('<h2 class="section-header">⚙️ Settings</h2>', 
+    st.markdown('<h2 class="section-header">[Settings] Settings</h2>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
@@ -2136,7 +3083,7 @@ def page_downloads():
     # Upload Section (Pennsieve only)
     if st.session_state.get('platform') == 'pennsieve':
         st.markdown("---")
-        st.markdown('<h2 class="section-header">📤 Upload to Pennsieve</h2>', 
+        st.markdown('<h2 class="section-header"> Upload to Pennsieve</h2>', 
                     unsafe_allow_html=True)
         
         st.info("Upload processed/derived data back to Pennsieve dataset")
@@ -2146,8 +3093,8 @@ def page_downloads():
             "Upload Mode",
             options=['files', 'directory'],
             format_func=lambda x: {
-                'files': '📄 Individual Files (drag & drop)',
-                'directory': '📁 Directory (select folder from local system)'
+                'files': ' Individual Files (drag & drop)',
+                'directory': '[Folder] Directory (select folder from local system)'
             }[x],
             key="upload_mode",
             horizontal=True
@@ -2189,7 +3136,7 @@ def page_downloads():
                     
                     total_size = sum(f.stat().st_size for f in files_in_dir)
                     
-                    with st.expander(f"📁 Preview: {len(files_in_dir)} files ({format_file_size(total_size)})"):
+                    with st.expander(f"[Folder] Preview: {len(files_in_dir)} files ({format_file_size(total_size)})"):
                         preview_df = pd.DataFrame([
                             {
                                 'File': f.name,
@@ -2212,7 +3159,7 @@ def page_downloads():
                 key="upload_remote_path",
                 help="Destination path in your Pennsieve dataset"
             )
-            st.caption("⚡ Files will be uploaded to this path")
+            st.caption("[Fast] Files will be uploaded to this path")
             
             # Upload options
             st.markdown("**Upload Options**")
@@ -2253,7 +3200,7 @@ def page_downloads():
                     file_paths_to_upload = [str(f) for f in Path(local_directory).glob('*') if f.is_file()]
             
             upload_button = st.button(
-                f"📤 Upload {len(file_paths_to_upload) if file_paths_to_upload else 0} Files",
+                f" Upload {len(file_paths_to_upload) if file_paths_to_upload else 0} Files",
                 type="primary",
                 use_container_width=True,
                 disabled=not can_upload
@@ -2310,7 +3257,7 @@ def page_downloads():
                 )
     else:
         st.markdown("---")
-        st.info("📖 **OpenNeuro is read-only**. Upload not supported. Use Pennsieve for private datasets with upload capabilities.")
+        st.info(" **OpenNeuro is read-only**. Upload not supported. Use Pennsieve for private datasets with upload capabilities.")
 
 
 def page_qc():
@@ -2340,14 +3287,17 @@ def page_qc():
     
     auto_qc = st.session_state.automated_qc
     
-    # QC Type Tabs
-    tab1, tab2 = st.tabs(["📋 Manual QC", "🤖 Automated QC"])
+    # QC Type Tabs (v3.1+: Added Pennsieve Sync tab)
+    tab1, tab2, tab3 = st.tabs(["[List] Manual QC", "[Auto] Automated QC", "[Cloud] Pennsieve Sync"])
     
     with tab1:
         render_manual_qc_tab(qc_mgr)
     
     with tab2:
         render_automated_qc_tab(auto_qc)
+    
+    with tab3:
+        render_pennsieve_sync_tab(qc_mgr)
 
 
 def render_manual_qc_tab(qc_mgr):
@@ -2634,7 +3584,7 @@ def render_automated_qc_tab(auto_qc):
                 warn_count = sum(1 for r in results.values() if r['status'] == 'warning')
                 fail_count = sum(1 for r in results.values() if r['status'] == 'fail')
                 
-                st.success(f"✓ Automated QC complete: {pass_count} pass, {warn_count} warnings, {fail_count} fail")
+                st.success(f"[OK] Automated QC complete: {pass_count} pass, {warn_count} warnings, {fail_count} fail")
                 st.rerun()
     
     st.markdown("---")
@@ -2686,7 +3636,7 @@ def render_automated_qc_tab(auto_qc):
             st.session_state.current_page = 'subject_detail'
             st.rerun()
     else:
-        st.success("✓ No automated QC issues detected")
+        st.success("[OK] No automated QC issues detected")
     
     st.markdown("---")
     
@@ -2712,13 +3662,528 @@ def render_automated_qc_tab(auto_qc):
             st.info(f"Showing all {len(filtered)} subjects")
 
 
+def render_pennsieve_sync_tab(qc_mgr):
+    """Render Pennsieve QC sync tab for uploading QC results (v3.1+)."""
+    
+    # Sync Overview
+    st.markdown('<h2 class="section-header">QC Sync Status</h2>', 
+                unsafe_allow_html=True)
+    
+    st.info("Export and upload QC results to Pennsieve datasets as CSV files in derivatives/qc/")
+    
+    # Get Pennsieve datasets
+    datasets = st.session_state.db.get_all_datasets(status='active')
+    pennsieve_datasets = [ds for ds in datasets if ds['platform'] == 'pennsieve']
+    
+    if not pennsieve_datasets:
+        st.warning("No Pennsieve datasets configured")
+        st.markdown("**Note**: QC sync is only available for Pennsieve datasets")
+        return
+    
+    # Dataset selector
+    dataset_options = {ds['name']: ds for ds in pennsieve_datasets}
+    
+    if len(dataset_options) == 1:
+        selected_dataset_name = list(dataset_options.keys())[0]
+        selected_dataset = dataset_options[selected_dataset_name]
+        st.caption(f"Dataset: {selected_dataset_name}")
+    else:
+        selected_dataset_name = st.selectbox(
+            "Select Pennsieve Dataset",
+            options=list(dataset_options.keys()),
+            key="pennsieve_sync_dataset"
+        )
+        selected_dataset = dataset_options[selected_dataset_name]
+    
+    dataset_id = selected_dataset['id']
+    
+    # Get unsynced QC count
+    unsynced_count = qc_mgr.get_unsynced_qc_count(dataset_id)
+    unsynced_scans = st.session_state.db.get_unsynced_scans(dataset_id)
+    
+    # Sync metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "Unsynced QC Records",
+            unsynced_count,
+            delta="pending upload"
+        )
+    
+    with col2:
+        # Get last sync date
+        conn = st.session_state.db._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT MAX(sync_date) 
+            FROM scans 
+            WHERE dataset_id = ? AND synced_to_platform = 1
+        """, (dataset_id,))
+        last_sync = cursor.fetchone()[0]
+        conn.close()
+        
+        if last_sync:
+            from src.utils import format_timestamp
+            st.metric(
+                "Last Sync",
+                format_timestamp(last_sync)
+            )
+        else:
+            st.metric("Last Sync", "Never")
+    
+    with col3:
+        # Count total reviewed scans
+        conn = st.session_state.db._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM scans 
+            WHERE dataset_id = ? AND qc_status != 'pending'
+        """, (dataset_id,))
+        reviewed_count = cursor.fetchone()[0]
+        conn.close()
+        
+        st.metric(
+            "Total Reviewed Scans",
+            reviewed_count
+        )
+    
+    st.markdown("---")
+    
+    # Unsynced QC preview
+    if unsynced_count > 0:
+        st.markdown('<h2 class="section-header">Unsynced QC Results</h2>', 
+                    unsafe_allow_html=True)
+        
+        preview_data = []
+        for scan in unsynced_scans[:10]:
+            preview_data.append({
+                'Subject': scan['subject_id'],
+                'Session': scan['session'],
+                'Scan': f"{scan['modality']}/{scan['suffix']}",
+                'QC Status': scan['qc_status'],
+                'Flagged': 'Yes' if scan['flagged'] else 'No',
+                'Reviewed By': scan.get('reviewed_by', '—')
+            })
+        
+        if preview_data:
+            st.dataframe(pd.DataFrame(preview_data), use_container_width=True, hide_index=True)
+            if len(unsynced_scans) > 10:
+                st.caption(f"Showing 10 of {len(unsynced_scans)} unsynced records")
+    
+    st.markdown("---")
+    
+    # Export and Upload Actions
+    st.markdown('<h2 class="section-header">Export & Upload QC Results</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button(" Export QC CSV", use_container_width=True, disabled=(unsynced_count == 0)):
+            if unsynced_count == 0:
+                st.warning("No QC results to export")
+            else:
+                # Generate CSV filename
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                dataset_name_clean = selected_dataset_name.replace(' ', '_').replace('/', '_')
+                csv_filename = f"qc_results_{dataset_name_clean}_{timestamp}.csv"
+                csv_path = f"data/{csv_filename}"
+                
+                # Export CSV
+                with st.spinner("Generating QC CSV..."):
+                    success = qc_mgr.export_qc_csv(
+                        dataset_id=dataset_id,
+                        output_path=csv_path,
+                        include_pending=False
+                    )
+                
+                if success:
+                    st.success(f"[OK] QC CSV exported: {csv_filename}")
+                    st.session_state.last_qc_csv_path = csv_path
+                    
+                    # Offer download
+                    with open(csv_path, 'rb') as f:
+                        st.download_button(
+                            label="Download CSV",
+                            data=f,
+                            file_name=csv_filename,
+                            mime='text/csv',
+                            use_container_width=True
+                        )
+                else:
+                    st.error("Failed to export QC CSV")
+    
+    with col2:
+        # Check if we have credentials and a recent CSV
+        has_csv = st.session_state.get('last_qc_csv_path') and Path(st.session_state.last_qc_csv_path).exists()
+        has_credentials = selected_dataset.get('api_key_encrypted') and selected_dataset.get('api_secret_encrypted')
+        
+        upload_disabled = not (has_csv and has_credentials and unsynced_count > 0)
+        
+        if st.button("[Cloud] Push to Pennsieve", 
+                    type="primary", 
+                    use_container_width=True,
+                    disabled=upload_disabled):
+            
+            if not has_csv:
+                st.error("Please export QC CSV first")
+            elif not has_credentials:
+                st.error("No Pennsieve credentials found for this dataset")
+            else:
+                csv_path = st.session_state.last_qc_csv_path
+                
+                # Initialize Pennsieve Agent
+                try:
+                    from src.pennsieve_agent import PennsieveAgent
+                    
+                    agent = PennsieveAgent()
+                    
+                    # Upload with progress
+                    with st.spinner("Uploading QC results to Pennsieve..."):
+                        progress_container = st.empty()
+                        
+                        def upload_progress(pct, msg):
+                            if pct:
+                                progress_container.progress(pct / 100, text=msg)
+                            else:
+                                progress_container.text(msg)
+                        
+                        success = agent.upload_qc_csv(
+                            csv_path=csv_path,
+                            dataset_name=selected_dataset.get('dataset_id_external') or selected_dataset['name'],
+                            api_key=selected_dataset['api_key_encrypted'],
+                            api_secret=selected_dataset['api_secret_encrypted'],
+                            remote_folder='derivatives/qc',
+                            progress_callback=upload_progress
+                        )
+                    
+                    progress_container.empty()
+                    
+                    if success:
+                        # Mark scans as synced
+                        scan_ids = [scan['id'] for scan in unsynced_scans]
+                        st.session_state.db.mark_scans_synced(scan_ids)
+                        
+                        st.success(f"[OK] QC results uploaded to Pennsieve!")
+                        st.info(f"Location: derivatives/qc/{Path(csv_path).name}")
+                        st.balloons()
+                        
+                        # Clear cached CSV path
+                        st.session_state.last_qc_csv_path = None
+                        
+                        st.rerun()
+                    else:
+                        st.error("Upload failed - check credentials and network connection")
+                
+                except RuntimeError as e:
+                    st.error(f"Pennsieve Agent not available: {e}")
+                    st.info("Install with: pip install pennsieve")
+                except Exception as e:
+                    st.error(f"Upload error: {e}")
+    
+    # Help text
+    if upload_disabled:
+        reasons = []
+        if not has_csv:
+            reasons.append("Export QC CSV first")
+        if not has_credentials:
+            reasons.append("Configure Pennsieve credentials")
+        if unsynced_count == 0:
+            reasons.append("No unsynced QC results")
+        
+        st.caption(f"Push disabled: {', '.join(reasons)}")
+    
+    st.markdown("---")
+    
+    # Sync workflow guide
+    with st.expander("How QC Sync Works"):
+        st.markdown("""
+        **Workflow**:
+        1. Review scans on Subject Detail pages or QC page
+        2. Mark QC status for each scan (pass/fail/needs review)
+        3. Add notes and flag issues as needed
+        4. Export QC results as CSV (includes all unsynced scans)
+        5. Push CSV to Pennsieve (uploads to derivatives/qc/ folder)
+        6. QC results marked as synced in local database
+        
+        **CSV Format**:
+        - Filename: `qc_results_<dataset>_<timestamp>.csv`
+        - Location in Pennsieve: `derivatives/qc/`
+        - Columns: scan_id, subject_id, session_id, modality, suffix, qc_status, qc_notes, reviewed_by, reviewed_date, flagged, file_path
+        
+        **Collaboration**:
+        - Other reviewers can download the CSV from Pennsieve
+        - Import CSV to merge QC results (latest timestamp wins)
+        - Track QC history and changes over time
+        
+        **BIDS Compliance**:
+        - QC results stored in derivatives/ (not raw data)
+        - Follows BIDS convention for derived/processed data
+        - Does not modify original dataset files
+        """)
+
+
+def get_available_sessions(dataset_id):
+    """Get list of available sessions for a dataset from subject_sessions table."""
+    if not st.session_state.db or not dataset_id:
+        return []
+    
+    try:
+        # Query unique session IDs for this dataset
+        sessions_info = st.session_state.db.execute_query(
+            "SELECT DISTINCT session_id FROM subject_sessions WHERE dataset_id = ? ORDER BY session_id",
+            (dataset_id,),
+            fetch=True
+        )
+        return [row[0] for row in sessions_info] if sessions_info else []
+    except Exception as e:
+        return []
+
+
+def display_session_scans(session_id, scans, subject_id, platform=None, dataset_remote_id=None, use_db_scans=False):
+    """Display scans for a specific session with actions.
+    
+    Args:
+        session_id: Session identifier (e.g., '2WK', 'ses-01')
+        scans: List of scan dictionaries for this session
+        subject_id: Subject identifier
+        platform: Platform name (for URL generation)
+        dataset_remote_id: Remote dataset ID
+        use_db_scans: Whether using database scans vs BIDS loader
+    """
+    st.markdown("---")
+    st.markdown(f'<h2 class="section-header">Session {session_id}</h2>', 
+                unsafe_allow_html=True)
+    
+    if scans:
+        # Scan-level QC interface (v3.1+)
+        for idx, scan in enumerate(scans):
+            from src.utils import format_file_size
+            
+            if use_db_scans:
+                # Database scans (cloud datasets)
+                file_size = scan.get('file_size', 0)
+                is_stub = scan.get('download_status') != 'completed'
+                scan_id = scan.get('id')
+            else:
+                # BIDS loader scans (local datasets)
+                file_size = st.session_state.bids_loader.get_file_size(
+                    scan['file_path']
+                )
+                is_stub = st.session_state.bids_loader.is_stub_file(
+                    scan['file_path']
+                )
+                # Get scan_id from database
+                db_scans = st.session_state.db.get_subject_scans(subject_id, session_id)
+                scan_id = None
+                for db_scan in db_scans:
+                    if db_scan['file_path'] == scan['file_path']:
+                        scan_id = db_scan['id']
+                        break
+            
+            # Get current QC status from database
+            qc_data = st.session_state.db.get_scan_qc(scan_id) if scan_id else None
+            current_qc_status = qc_data.get('qc_status', 'pending') if qc_data else 'pending'
+            current_notes = qc_data.get('qc_notes', '') if qc_data else ''
+            current_flagged = qc_data.get('flagged', 0) if qc_data else 0
+            
+            # Display scan with QC controls
+            with st.container():
+                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 2, 1])
+                
+                with col1:
+                    st.markdown(f"**{scan.get('suffix', 'unknown')}**")
+                    st.caption(f"{scan.get('modality', '')} | {format_file_size(file_size)}")
+                
+                with col2:
+                    status_badge = 'Stub' if is_stub else 'Downloaded'
+                    st.caption(status_badge)
+                
+                with col3:
+                    # QC status indicator
+                    qc_colors = {
+                        'pass': '[PASS]',
+                        'fail': '[FAIL]',
+                        'needs_review': '[REVIEW]',
+                        'pending': '[INACTIVE]'
+                    }
+                    qc_icon = qc_colors.get(current_qc_status, '[INACTIVE]')
+                    st.caption(f"{qc_icon} {current_qc_status}")
+                
+                with col4:
+                    # Quick QC buttons
+                    qc_col1, qc_col2, qc_col3 = st.columns(3)
+                    with qc_col1:
+                        if st.button("[OK]", key=f"qc_pass_{scan_id}_{idx}", help="Mark as Pass"):
+                            if scan_id:
+                                st.session_state.db.update_scan_qc(
+                                    scan_id=scan_id,
+                                    qc_status='pass',
+                                    reviewed_by=os.getenv('USER', 'reviewer'),
+                                    flagged=False
+                                )
+                                st.rerun()
+                    with qc_col2:
+                        if st.button("[X]", key=f"qc_fail_{scan_id}_{idx}", help="Mark as Fail"):
+                            if scan_id:
+                                st.session_state.db.update_scan_qc(
+                                    scan_id=scan_id,
+                                    qc_status='fail',
+                                    reviewed_by=os.getenv('USER', 'reviewer'),
+                                    flagged=True
+                                )
+                                st.rerun()
+                    with qc_col3:
+                        if st.button("?", key=f"qc_review_{scan_id}_{idx}", help="Needs Review"):
+                            if scan_id:
+                                st.session_state.db.update_scan_qc(
+                                    scan_id=scan_id,
+                                    qc_status='needs_review',
+                                    reviewed_by=os.getenv('USER', 'reviewer'),
+                                    flagged=True
+                                )
+                                st.rerun()
+                
+                with col5:
+                    # View button
+                    if st.button("[View]", key=f"view_{scan_id}_{idx}", help="View in Viewer"):
+                        st.session_state.selected_scan = scan
+                        st.session_state.current_page = 'viewer'
+                        st.rerun()
+                
+                # Show QC notes if any
+                if current_notes:
+                    st.caption(f"[Note] {current_notes}")
+                
+                # Add notes expander
+                with st.expander(f"QC Notes", expanded=False):
+                    notes_input = st.text_area(
+                        "Notes",
+                        value=current_notes,
+                        key=f"notes_{scan_id}_{idx}",
+                        height=80,
+                        label_visibility="collapsed"
+                    )
+                    
+                    if st.button("Save Notes", key=f"save_notes_{scan_id}_{idx}"):
+                        if scan_id:
+                            st.session_state.db.update_scan_qc(
+                                scan_id=scan_id,
+                                qc_status=current_qc_status,
+                                notes=notes_input,
+                                reviewed_by=os.getenv('USER', 'reviewer')
+                            )
+                            st.success("Notes saved")
+                            st.rerun()
+        
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("Add All to Queue", key=f"dl_{session_id}"):
+                # Initialize agent factory and download manager if needed (v3.1.1+)
+                if 'agent_factory' not in st.session_state:
+                    from src.agent_factory import AgentFactory
+                    st.session_state.agent_factory = AgentFactory(st.session_state.db)
+                
+                if 'download_manager' not in st.session_state:
+                    from src.download_manager import DownloadManager
+                    st.session_state.download_manager = DownloadManager(
+                        ps_client=st.session_state.ps_client,
+                        database=st.session_state.db,
+                        max_concurrent=3,
+                        agent_factory=st.session_state.agent_factory
+                    )
+                
+                # Add each scan to queue
+                added = 0
+                for scan in scans:
+                    # Get package ID (from stub file or metadata)
+                    package_id = None
+                    file_path = scan.get('file_path', '')
+                    
+                    if use_db_scans:
+                        package_id = scan.get('pennsieve_package_id')
+                    elif st.session_state.bids_loader.is_stub_file(file_path):
+                        from src.utils import parse_pennsieve_stub
+                        package_id = parse_pennsieve_stub(file_path)
+                    
+                    if package_id:
+                        # Get scan from database to get scan_id
+                        db_scans = st.session_state.db.get_subject_scans(subject_id, session_id)
+                        scan_id = None
+                        for db_scan in db_scans:
+                            if db_scan['file_path'] == file_path:
+                                scan_id = db_scan['id']
+                                break
+                        
+                        # If scan not in DB, add it
+                        if not scan_id:
+                            scan_id = st.session_state.db.add_scan(
+                                subject_id=subject_id,
+                                session=session_id,
+                                modality=scan.get('modality', ''),
+                                file_path=file_path,
+                                suffix=scan.get('suffix', ''),
+                                pennsieve_package_id=package_id
+                            )
+                        
+                        if scan_id:
+                            file_size = scan.get('file_size', 0) if use_db_scans else st.session_state.bids_loader.get_file_size(file_path)
+                            success = st.session_state.download_manager.add_to_queue(
+                                scan_id=scan_id,
+                                subject_id=subject_id,
+                                file_path=file_path,
+                                package_id=package_id,
+                                file_size=file_size
+                            )
+                            if success:
+                                added += 1
+                
+                if added > 0:
+                    st.success(f"Added {added} scans to download queue")
+                else:
+                    st.warning("No scans added to queue")
+    else:
+        st.info(f"No scans found for session {session_id}")
+
+
+def get_subject_session_columns(subject):
+    """Get session columns dynamically for export.
+    
+    Returns dict with session column names and values.
+    """
+    dataset_id = subject.get('dataset_id')
+    subject_id = subject['subject_id']
+    
+    # Get sessions for this subject
+    if st.session_state.db and dataset_id:
+        sessions_info = st.session_state.db.get_subject_sessions(subject_id, dataset_id)
+        
+        columns = {}
+        for session in sessions_info:
+            session_id = session['session_id']
+            columns[f'Has {session_id}'] = 'Yes'
+            columns[f'Scan Count {session_id}'] = session.get('scan_count', 0)
+        
+        return columns
+    
+    # Fallback to legacy columns if no session data
+    return {
+        'Has 2WK': 'Yes' if subject.get('has_2wk') else 'No',
+        'Has 6MO': 'Yes' if subject.get('has_6mo') else 'No',
+        'Scan Count 2WK': subject.get('scan_count_2wk', 0),
+        'Scan Count 6MO': subject.get('scan_count_6mo', 0)
+    }
+
+
 def page_subject_detail():
     """Subject detail page."""
     subject_id = st.session_state.selected_subject
     
     if not subject_id:
         st.warning("No subject selected")
-        if st.button("← Back to Subjects"):
+        if st.button("<- Back to Subjects"):
             st.session_state.current_page = 'subjects'
             st.rerun()
         return
@@ -2732,7 +4197,7 @@ def page_subject_detail():
         st.markdown(f'<h1 class="main-header">Subject: {subject_id}</h1>', 
                     unsafe_allow_html=True)
     with col2:
-        if st.button("← Back to Subjects", use_container_width=True):
+        if st.button("<- Back to Subjects", use_container_width=True):
             st.session_state.current_page = 'subjects'
             st.rerun()
     
@@ -2790,192 +4255,59 @@ def page_subject_detail():
         key="qc_notes_text"
     )
     
-    # Session scans
+    # Session scans - Dynamic session support
     if not st.session_state.bids_loader:
         st.warning("BIDS loader not initialized")
         return
     
-    # Session 2WK
-    if subject.get('has_2wk'):
-        st.markdown("---")
-        st.markdown('<h2 class="section-header">Session 2WK</h2>', 
-                    unsafe_allow_html=True)
-        
-        scans_2wk = st.session_state.bids_loader.get_subject_scans(
-            subject_id, '2WK'
-        )
-        
-        if scans_2wk:
-            scan_data = []
-            for scan in scans_2wk:
-                from src.utils import format_file_size
-                file_size = st.session_state.bids_loader.get_file_size(
-                    scan['file_path']
-                )
-                is_stub = st.session_state.bids_loader.is_stub_file(
-                    scan['file_path']
-                )
-                
-                scan_data.append({
-                    'Scan': scan.get('suffix', 'unknown'),
-                    'Modality': scan.get('modality', ''),
-                    'Size': format_file_size(file_size),
-                    'Status': 'Stub' if is_stub else 'Downloaded',
-                    'File': Path(scan['file_path']).name
-                })
-            
-            df_2wk = pd.DataFrame(scan_data)
-            st.dataframe(df_2wk, use_container_width=True, hide_index=True)
-            
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                if st.button("Add All to Queue", key="dl_2wk"):
-                    # Initialize download manager if needed
-                    if 'download_manager' not in st.session_state:
-                        from src.download_manager import DownloadManager
-                        st.session_state.download_manager = DownloadManager(
-                            ps_client=st.session_state.ps_client,
-                            database=st.session_state.db,
-                            max_concurrent=3
-                        )
-                    
-                    # Add each scan to queue
-                    added = 0
-                    for scan in scans_2wk:
-                        # Get package ID (from stub file or metadata)
-                        package_id = None
-                        if st.session_state.bids_loader.is_stub_file(scan['file_path']):
-                            from src.utils import parse_pennsieve_stub
-                            package_id = parse_pennsieve_stub(scan['file_path'])
-                        
-                        if package_id:
-                            # Get scan from database to get scan_id
-                            db_scans = st.session_state.db.get_subject_scans(subject_id, '2WK')
-                            scan_id = None
-                            for db_scan in db_scans:
-                                if db_scan['file_path'] == scan['file_path']:
-                                    scan_id = db_scan['id']
-                                    break
-                            
-                            # If scan not in DB, add it
-                            if not scan_id:
-                                scan_id = st.session_state.db.add_scan(
-                                    subject_id=subject_id,
-                                    session='2WK',
-                                    modality=scan.get('modality', ''),
-                                    file_path=scan['file_path'],
-                                    suffix=scan.get('suffix', ''),
-                                    pennsieve_package_id=package_id
-                                )
-                            
-                            if scan_id:
-                                success = st.session_state.download_manager.add_to_queue(
-                                    scan_id=scan_id,
-                                    subject_id=subject_id,
-                                    file_path=scan['file_path'],
-                                    package_id=package_id,
-                                    file_size=st.session_state.bids_loader.get_file_size(scan['file_path'])
-                                )
-                                if success:
-                                    added += 1
-                    
-                    if added > 0:
-                        st.success(f"Added {added} scans to download queue")
-                    else:
-                        st.warning("No scans added to queue")
-        else:
-            st.info("No scans found for session 2WK")
+    # Get dataset info
+    dataset_id = subject.get('dataset_id')
     
-    # Session 6MO
-    if subject.get('has_6mo'):
-        st.markdown("---")
-        st.markdown('<h2 class="section-header">Session 6MO</h2>', 
-                    unsafe_allow_html=True)
-        
-        scans_6mo = st.session_state.bids_loader.get_subject_scans(
-            subject_id, '6MO'
+    # Determine if using database scans (cloud) or BIDS loader (local)
+    use_db_scans = False
+    platform = None
+    dataset_remote_id = None
+    
+    if dataset_id:
+        dataset_info = st.session_state.db.execute_query(
+            "SELECT platform, dataset_id_external FROM datasets WHERE id = ?",
+            (dataset_id,),
+            fetch=True
         )
+        if dataset_info and len(dataset_info) > 0:
+            platform = dataset_info[0][0]
+            dataset_remote_id = dataset_info[0][1]
+            use_db_scans = platform in ['pennsieve', 'openneuro', 'dandi']
+    
+    # Get all sessions for subject (dynamic)
+    all_sessions = []
+    
+    if use_db_scans:
+        # Cloud datasets: query subject_sessions table
+        sessions_info = st.session_state.db.get_subject_sessions(subject_id, dataset_id)
+        all_sessions = [s['session_id'] for s in sessions_info if s.get('scan_count', 0) > 0]
         
-        if scans_6mo:
-            scan_data = []
-            for scan in scans_6mo:
-                from src.utils import format_file_size
-                file_size = st.session_state.bids_loader.get_file_size(
-                    scan['file_path']
-                )
-                is_stub = st.session_state.bids_loader.is_stub_file(
-                    scan['file_path']
-                )
-                
-                scan_data.append({
-                    'Scan': scan.get('suffix', 'unknown'),
-                    'Modality': scan.get('modality', ''),
-                    'Size': format_file_size(file_size),
-                    'Status': 'Stub' if is_stub else 'Downloaded',
-                    'File': Path(scan['file_path']).name
-                })
+        # Fallback: extract from scans table if subject_sessions empty
+        if not all_sessions:
+            all_scans = st.session_state.db.get_subject_scans(subject_id)
+            all_sessions = list(set(scan.get('session') for scan in all_scans if scan.get('session')))
+    else:
+        # Local datasets: use BIDS loader
+        all_sessions = st.session_state.bids_loader.get_sessions(subject_id)
+    
+    # Display each session dynamically
+    if all_sessions:
+        for session_id in sorted(all_sessions):
+            # Get scans for this session
+            if use_db_scans:
+                scans = st.session_state.db.get_subject_scans(subject_id, session_id)
+            else:
+                scans = st.session_state.bids_loader.get_subject_scans(subject_id, session_id)
             
-            df_6mo = pd.DataFrame(scan_data)
-            st.dataframe(df_6mo, use_container_width=True, hide_index=True)
-            
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                if st.button("Add All to Queue", key="dl_6mo"):
-                    # Initialize download manager if needed
-                    if 'download_manager' not in st.session_state:
-                        from src.download_manager import DownloadManager
-                        st.session_state.download_manager = DownloadManager(
-                            ps_client=st.session_state.ps_client,
-                            database=st.session_state.db,
-                            max_concurrent=3
-                        )
-                    
-                    # Add each scan to queue
-                    added = 0
-                    for scan in scans_6mo:
-                        # Get package ID (from stub file or metadata)
-                        package_id = None
-                        if st.session_state.bids_loader.is_stub_file(scan['file_path']):
-                            from src.utils import parse_pennsieve_stub
-                            package_id = parse_pennsieve_stub(scan['file_path'])
-                        
-                        if package_id:
-                            # Get scan from database to get scan_id
-                            db_scans = st.session_state.db.get_subject_scans(subject_id, '6MO')
-                            scan_id = None
-                            for db_scan in db_scans:
-                                if db_scan['file_path'] == scan['file_path']:
-                                    scan_id = db_scan['id']
-                                    break
-                            
-                            # If scan not in DB, add it
-                            if not scan_id:
-                                scan_id = st.session_state.db.add_scan(
-                                    subject_id=subject_id,
-                                    session='6MO',
-                                    modality=scan.get('modality', ''),
-                                    file_path=scan['file_path'],
-                                    suffix=scan.get('suffix', ''),
-                                    pennsieve_package_id=package_id
-                                )
-                            
-                            if scan_id:
-                                success = st.session_state.download_manager.add_to_queue(
-                                    scan_id=scan_id,
-                                    subject_id=subject_id,
-                                    file_path=scan['file_path'],
-                                    package_id=package_id,
-                                    file_size=st.session_state.bids_loader.get_file_size(scan['file_path'])
-                                )
-                                if success:
-                                    added += 1
-                    
-                    if added > 0:
-                        st.success(f"Added {added} scans to download queue")
-                    else:
-                        st.warning("No scans added to queue")
-        else:
-            st.info("No scans found for session 6MO")
+            # Display session using helper function
+            display_session_scans(session_id, scans, subject_id, platform, dataset_remote_id, use_db_scans)
+    else:
+        st.info("No session data available for this subject")
 
 
 def page_export():
@@ -2990,7 +4322,7 @@ def page_export():
         return
     
     # Create tabs for different export options
-    tab1, tab2, tab3 = st.tabs(["📦 Export Custom Cohort", "📊 QC Results", "📋 Subject Lists"])
+    tab1, tab2, tab3 = st.tabs(["[Export] Export Custom Cohort", "[Data] QC Results", "[List] Subject Lists"])
     
     with tab1:
         # Custom Cohort Export
@@ -3022,18 +4354,23 @@ def page_export():
                 else:
                     export_data = []
                     for subject in subjects:
-                        export_data.append({
+                        # Get dynamic session columns
+                        session_cols = get_subject_session_columns(subject)
+                        
+                        row = {
                             'Subject ID': subject['subject_id'],
                             'QC Status': subject.get('qc_status', 'pending'),
                             'Flagged': 'Yes' if subject.get('flagged') else 'No',
-                            'Has 2WK': 'Yes' if subject.get('has_2wk') else 'No',
-                            'Has 6MO': 'Yes' if subject.get('has_6mo') else 'No',
-                            'Scan Count 2WK': subject.get('scan_count_2wk', 0),
-                            'Scan Count 6MO': subject.get('scan_count_6mo', 0),
+                        }
+                        # Add dynamic session columns
+                        row.update(session_cols)
+                        # Add remaining columns
+                        row.update({
                             'QC Notes': subject.get('qc_notes', ''),
                             'Reviewed By': subject.get('reviewed_by', ''),
                             'Review Date': subject.get('review_date', '')
                         })
+                        export_data.append(row)
                     
                     df = pd.DataFrame(export_data)
                     csv = df.to_csv(index=False)
@@ -3064,14 +4401,17 @@ def page_export():
                 if subjects:
                     export_data = []
                     for subject in subjects:
-                        export_data.append({
+                        # Get dynamic session columns
+                        session_cols = get_subject_session_columns(subject)
+                        
+                        row = {
                             'Subject ID': subject['subject_id'],
-                            'Has 2WK': 'Yes' if subject.get('has_2wk') else 'No',
-                            'Has 6MO': 'Yes' if subject.get('has_6mo') else 'No',
-                            'Scan Count 2WK': subject.get('scan_count_2wk', 0),
-                            'Scan Count 6MO': subject.get('scan_count_6mo', 0),
-                            'QC Status': subject.get('qc_status', 'pending')
-                        })
+                        }
+                        # Add dynamic session columns
+                        row.update(session_cols)
+                        # Add remaining columns
+                        row['QC Status'] = subject.get('qc_status', 'pending')
+                        export_data.append(row)
                     
                     df = pd.DataFrame(export_data)
                     csv = df.to_csv(index=False)
@@ -3088,22 +4428,33 @@ def page_export():
         
         with col2:
             st.write("**Complete Subjects**")
-            st.caption("Both 2WK and 6MO")
+            st.caption("2+ sessions")
             if st.button("Export Complete", use_container_width=True, key="export_complete"):
                 subjects = st.session_state.db.get_all_subjects()
                 
-                # Filter complete subjects
-                complete_subjects = [s for s in subjects if s.get('has_2wk') and s.get('has_6mo')]
+                # Filter complete subjects (2+ sessions)
+                complete_subjects = []
+                for s in subjects:
+                    dataset_id = s.get('dataset_id')
+                    subject_id = s['subject_id']
+                    sessions_info = st.session_state.db.get_subject_sessions(subject_id, dataset_id)
+                    if len(sessions_info) >= 2:
+                        complete_subjects.append(s)
                 
                 if complete_subjects:
                     export_data = []
                     for subject in complete_subjects:
-                        export_data.append({
+                        # Get dynamic session columns
+                        session_cols = get_subject_session_columns(subject)
+                        
+                        row = {
                             'Subject ID': subject['subject_id'],
-                            'Scan Count 2WK': subject.get('scan_count_2wk', 0),
-                            'Scan Count 6MO': subject.get('scan_count_6mo', 0),
-                            'QC Status': subject.get('qc_status', 'pending')
-                        })
+                        }
+                        # Add dynamic session columns
+                        row.update(session_cols)
+                        # Add remaining columns
+                        row['QC Status'] = subject.get('qc_status', 'pending')
+                        export_data.append(row)
                     
                     df = pd.DataFrame(export_data)
                     csv = df.to_csv(index=False)
@@ -3134,14 +4485,21 @@ def page_export():
                 if flagged_subjects:
                     export_data = []
                     for subject in flagged_subjects:
-                        export_data.append({
+                        # Get dynamic session columns
+                        session_cols = get_subject_session_columns(subject)
+                        
+                        row = {
                             'Subject ID': subject['subject_id'],
                             'QC Status': subject.get('qc_status', 'pending'),
-                            'Has 2WK': 'Yes' if subject.get('has_2wk') else 'No',
-                            'Has 6MO': 'Yes' if subject.get('has_6mo') else 'No',
+                        }
+                        # Add dynamic session columns
+                        row.update(session_cols)
+                        # Add remaining columns
+                        row.update({
                             'QC Notes': subject.get('qc_notes', ''),
                             'Reviewed By': subject.get('reviewed_by', '')
                         })
+                        export_data.append(row)
                     
                     df = pd.DataFrame(export_data)
                     csv = df.to_csv(index=False)
@@ -3223,10 +4581,694 @@ def page_export():
                     st.info("No download history available")
 
 
+def page_transfer():
+    """Data Transfer page for bidirectional platform-to-platform transfers (v3.1.1+)."""
+    render_page_header('transfer', show_back_to_dashboard=True)
+    render_breadcrumb('transfer')
+    st.markdown('<h1 class="main-header">Data Transfer</h1>', 
+                unsafe_allow_html=True)
+    
+    if not st.session_state.db:
+        st.warning("Please complete setup first")
+        return
+    
+    st.info("Transfer BIDS data between platforms - supports bidirectional transfers between Local, Pennsieve, XNAT, HPC, and Remote Server")
+    
+    # Initialize agent factory
+    if 'agent_factory' not in st.session_state:
+        from src.agent_factory import AgentFactory
+        st.session_state.agent_factory = AgentFactory(st.session_state.db)
+    
+    factory = st.session_state.agent_factory
+    
+    # Get all datasets
+    all_datasets = st.session_state.db.get_all_datasets(status='active')
+    
+    if not all_datasets or len(all_datasets) < 1:
+        st.warning("No datasets configured. Add datasets in Manage Datasets page.")
+        return
+    
+    platform_emojis = {
+        'local': '[L]',
+        'pennsieve': '[P]',
+        'openneuro': '[O]',
+        'dandi': '[D]',
+        'xnat': '[X]',
+        'hpc': '[H]',
+        'remote_server': '[R]'
+    }
+    
+    # Source and Destination Selection
+    st.markdown('<h2 class="section-header">[Sync] Transfer Configuration</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("###  Source")
+        
+        source_dataset_options = {
+            f"{platform_emojis.get(ds['platform'], '[Data]')} {ds['name']}": ds['id']
+            for ds in all_datasets
+        }
+        
+        selected_source_display = st.selectbox(
+            "Source Platform/Dataset",
+            options=list(source_dataset_options.keys()),
+            key='transfer_source_dataset',
+            help="Select where to transfer data FROM"
+        )
+        
+        source_dataset_id = source_dataset_options[selected_source_display]
+        source_dataset = st.session_state.db.get_dataset(source_dataset_id)
+        
+        st.caption(f"Platform: **{source_dataset['platform'].upper()}**")
+        
+        # Get subjects from source
+        source_subjects = st.session_state.db.get_subjects_by_dataset(source_dataset_id)
+        
+        if source_subjects:
+            st.caption(f"Available subjects: {len(source_subjects)}")
+            
+            # Multi-select subjects
+            subject_options = {
+                f"{subj['subject_id']}": subj['subject_id']
+                for subj in source_subjects
+            }
+            
+            selected_subjects = st.multiselect(
+                "Select subjects to transfer",
+                options=list(subject_options.keys()),
+                default=[],
+                key='transfer_subjects',
+                help="Choose which subjects to transfer"
+            )
+        else:
+            st.warning("No subjects indexed. Click 'Sync' in Manage Datasets.")
+            selected_subjects = []
+    
+    with col2:
+        st.markdown("###  Destination")
+        
+        # Filter out source from destination options
+        # Also filter read-only platforms (openneuro, dandi) as destinations
+        upload_capable_platforms = ['local', 'pennsieve', 'xnat', 'hpc', 'remote_server']
+        
+        dest_dataset_options = {
+            f"{platform_emojis.get(ds['platform'], '[Data]')} {ds['name']}": ds['id']
+            for ds in all_datasets
+            if ds['id'] != source_dataset_id and ds['platform'] in upload_capable_platforms
+        }
+        
+        if not dest_dataset_options:
+            st.warning("No valid destination datasets available. Add upload-capable datasets in Manage Datasets.")
+            dest_dataset = None
+        else:
+            selected_dest_display = st.selectbox(
+                "Destination Platform/Dataset",
+                options=list(dest_dataset_options.keys()),
+                key='transfer_dest_dataset',
+                help="Select where to transfer data TO"
+            )
+            
+            dest_dataset_id = dest_dataset_options[selected_dest_display]
+            dest_dataset = st.session_state.db.get_dataset(dest_dataset_id)
+            
+            st.caption(f"Platform: **{dest_dataset['platform'].upper()}**")
+    
+    st.markdown("---")
+    
+    # Transfer Options
+    st.markdown('<h2 class="section-header">[Settings] Transfer Options</h2>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        transfer_mode = st.radio(
+            "Transfer Mode",
+            options=['direct', 'cached'],
+            format_func=lambda x: 'Direct Transfer' if x == 'direct' else 'Via Local Cache',
+            key='transfer_mode',
+            help="Direct: Stream between platforms. Cached: Download to local first."
+        )
+    
+    with col2:
+        preserve_structure = st.checkbox(
+            "Preserve BIDS Structure",
+            value=True,
+            help="Maintain subject/session/modality folder structure"
+        )
+    
+    with col3:
+        verify_transfer = st.checkbox(
+            "Verify Transfer",
+            value=True,
+            help="Verify file integrity after transfer"
+        )
+    
+    st.markdown("---")
+    
+    # Transfer Preview
+    if selected_subjects and dest_dataset:
+        st.markdown('<h2 class="section-header">[List] Transfer Preview</h2>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Subjects to Transfer", len(selected_subjects))
+        
+        with col2:
+            # Estimate total scans
+            total_scans = 0
+            for subject_id in selected_subjects:
+                scans = st.session_state.db.get_scans_by_subject(subject_id, source_dataset_id)
+                total_scans += len(scans)
+            st.metric("Total Scans", total_scans)
+        
+        with col3:
+            # Estimate size
+            total_size = 0
+            for subject_id in selected_subjects:
+                scans = st.session_state.db.get_scans_by_subject(subject_id, source_dataset_id)
+                for scan in scans:
+                    total_size += scan.get('file_size', 0)
+            
+            from src.utils import format_file_size
+            st.metric("Estimated Size", format_file_size(total_size))
+        
+        # Transfer route display
+        st.info(f"""
+        **Transfer Route:**  
+        {platform_emojis.get(source_dataset['platform'], '[Data]')} **{source_dataset['name']}** ({source_dataset['platform'].upper()})  
+        -> {platform_emojis.get(dest_dataset['platform'], '[Data]')} **{dest_dataset['name']}** ({dest_dataset['platform'].upper()})
+        """)
+        
+        # Execute Transfer button
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            if st.button("[Start] Start Transfer", type="primary", use_container_width=True, key="execute_transfer"):
+                execute_transfer(
+                    source_dataset=source_dataset,
+                    dest_dataset=dest_dataset,
+                    subject_ids=selected_subjects,
+                    transfer_mode=transfer_mode,
+                    preserve_structure=preserve_structure,
+                    verify=verify_transfer,
+                    factory=factory,
+                    database=st.session_state.db
+                )
+        
+        with col2:
+            st.caption("Transfers will preserve BIDS structure and maintain data integrity")
+    
+    else:
+        if not selected_subjects:
+            st.info("Select subjects from source dataset to begin transfer")
+        elif not dest_dataset:
+            st.warning("Configure a valid destination dataset")
+    
+    st.markdown("---")
+    
+    # Transfer History
+    st.markdown('<h2 class="section-header"> Recent Transfers</h2>', 
+                unsafe_allow_html=True)
+    
+    # Query transfer history from metadata table
+    try:
+        history_query = """
+            SELECT key, value FROM metadata 
+            WHERE key LIKE 'transfer_session_%'
+            ORDER BY updated_at DESC
+            LIMIT 10
+        """
+        history_rows = st.session_state.db.execute_query(history_query, fetch=True)
+        
+        if history_rows:
+            history_data = []
+            for row in history_rows:
+                import json
+                transfer_info = json.loads(row['value'])
+                history_data.append({
+                    'Date': transfer_info.get('timestamp', 'Unknown')[:19],
+                    'Source': transfer_info.get('source_name', 'Unknown'),
+                    'Destination': transfer_info.get('dest_name', 'Unknown'),
+                    'Subjects': transfer_info.get('successful', 0),
+                    'Status': '[OK] Success' if transfer_info.get('failed', 0) == 0 else f"[WARNING] {transfer_info.get('failed', 0)} failed"
+                })
+            
+            import pandas as pd
+            history_df = pd.DataFrame(history_data)
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No transfer history yet")
+    except Exception as e:
+        st.warning(f"Could not load transfer history: {e}")
+
+
+def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List[str],
+                    transfer_mode: str, preserve_structure: bool, verify: bool,
+                    factory, database):
+    """
+    Execute bidirectional data transfer between platforms (v3.1.1+).
+    
+    Args:
+        source_dataset: Source dataset dict
+        dest_dataset: Destination dataset dict
+        subject_ids: List of subject IDs to transfer
+        transfer_mode: 'direct' or 'cached'
+        preserve_structure: Whether to preserve BIDS structure
+        verify: Whether to verify transfer integrity
+        factory: AgentFactory instance
+        database: Database instance
+    """
+    import time
+    from src.utils import format_file_size
+    from src.transfer_recovery import TransferRecovery
+    
+    # Initialize recovery manager
+    recovery = TransferRecovery(max_retries=3, retry_delay=2.0)
+    
+    st.markdown("---")
+    st.markdown('<h2 class="section-header"> Transfer in Progress</h2>', 
+                unsafe_allow_html=True)
+    
+    # Create agents with standardized error handling (v3.1.1+)
+    try:
+        source_agent = factory.get_agent(source_dataset['id']) if source_dataset['platform'] != 'local' else None
+        dest_agent = factory.get_agent(dest_dataset['id']) if dest_dataset['platform'] != 'local' else None
+    except Exception as e:
+        source_platform = source_dataset['platform']
+        dest_platform = dest_dataset['platform']
+        st.error(handle_agent_error(e, source_platform, 'agent creation'))
+        st.error(ErrorMessages.get_platform_help(source_platform))
+        return
+    
+    # Progress tracking
+    progress_container = st.container()
+    
+    with progress_container:
+        progress_bar = st.progress(0)
+        status_col1, status_col2, status_col3 = st.columns(3)
+        status_text = st.empty()
+        details_expander = st.expander("[Data] Transfer Details", expanded=True)
+    
+    total_subjects = len(subject_ids)
+    successful = 0
+    failed = 0
+    start_time = time.time()
+    transfer_log = []
+    
+    # Process each subject
+    for i, subject_id in enumerate(subject_ids):
+        # Update status
+        elapsed = time.time() - start_time
+        if i > 0 and elapsed > 0:
+            avg_time = elapsed / i
+            eta_seconds = avg_time * (total_subjects - i)
+            eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
+        else:
+            eta_str = "Calculating..."
+        
+        status_text.markdown(f"""
+        **Transferring subject {i+1}/{total_subjects}**: `{subject_id}`  
+        **Progress**: {(i/total_subjects)*100:.1f}% | **ETA**: {eta_str}
+        """)
+        
+        with status_col1:
+            st.metric("Subjects", f"{i}/{total_subjects}")
+        with status_col2:
+            st.metric("Success", successful)
+        with status_col3:
+            st.metric("Failed", failed, delta_color="inverse")
+        
+        subject_start_time = time.time()
+        
+        # Get scans for this subject
+        scans = database.get_scans_by_subject(subject_id, source_dataset['id'])
+        
+        if not scans:
+            failed += 1
+            transfer_log.append({
+                'subject': subject_id,
+                'status': '[X] No scans found',
+                'files': 0,
+                'time': '0s'
+            })
+            continue
+        
+        # Transfer each scan
+        transfer_success = True
+        transferred_count = 0
+        
+        for scan in scans:
+            try:
+                # Determine source path
+                if source_dataset['platform'] == 'local':
+                    source_path = scan['file_path']
+                else:
+                    # For cloud platforms, need to download first
+                    source_path = scan['file_path']
+                
+                # Determine destination path using standardized BIDS utils (v3.1.1+)
+                file_obj = Path(scan['file_path'])
+                
+                if preserve_structure:
+                    bids_path = extract_bids_path(scan['file_path'])
+                else:
+                    bids_path = file_obj.name
+                
+                # Execute transfer based on mode
+                if transfer_mode == 'direct':
+                    # Direct transfer (for SSH platforms)
+                    if source_dataset['platform'] == 'local' and dest_dataset['platform'] in ['hpc', 'remote_server', 'xnat', 'pennsieve']:
+                        # Local -> Destination
+                        if dest_dataset['platform'] in ['hpc', 'remote_server']:
+                            base_path = dest_dataset.get('dataset_id_external', '/data/bids')
+                            dest_path = f"{base_path}/{bids_path}"
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name}",
+                                source_path,
+                                dest_path
+                            )
+                        elif dest_dataset['platform'] == 'xnat':
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name} to XNAT",
+                                local_path=source_path,
+                                project_id=dest_dataset.get('dataset_id_external'),
+                                subject_id=subject_id
+                            )
+                        elif dest_dataset['platform'] == 'pennsieve':
+                            remote_dir = str(Path(bids_path).parent)
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name} to Pennsieve",
+                                local_path=source_path,
+                                dataset_name=dest_dataset.get('dataset_id_external') or dest_dataset['name'],
+                                remote_path=remote_dir,
+                                api_key=dest_dataset.get('api_key_encrypted'),
+                                api_secret=dest_dataset.get('api_secret_encrypted')
+                            )
+                    
+                    elif source_dataset['platform'] in ['hpc', 'remote_server'] and dest_dataset['platform'] == 'local':
+                        # HPC/Remote -> Local
+                        base_path = source_dataset.get('dataset_id_external', '/data/bids')
+                        remote_path = f"{base_path}/{bids_path}"
+                        local_dest = str(Path(dest_dataset.get('root_path', './data')) / bids_path)
+                        
+                        success, _ = recovery.retry_with_backoff(
+                            source_agent.download_file,
+                            f"Download {file_obj.name}",
+                            remote_path,
+                            local_dest
+                        )
+                    
+                    else:
+                        # For other combinations, use cached mode
+                        transfer_mode = 'cached'
+                        status_text.text(f"Direct transfer not supported, using cached mode")
+                
+                if transfer_mode == 'cached':
+                    # Download to local temp, then upload
+                    temp_dir = Path('./data/temp_transfer') / f"transfer_{int(time.time())}"
+                    temp_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    temp_file = temp_dir / bids_path
+                    temp_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Download from source (v3.1.1+ expanded support)
+                    if source_dataset['platform'] == 'local':
+                        # Copy local file
+                        import shutil
+                        shutil.copy2(source_path, str(temp_file))
+                        download_success = True
+                    
+                    elif source_dataset['platform'] in ['hpc', 'remote_server']:
+                        # SSH platforms
+                        base_path = source_dataset.get('dataset_id_external', '/data/bids')
+                        remote_path = f"{base_path}/{bids_path}"
+                        download_success, _ = recovery.retry_with_backoff(
+                            source_agent.download_file,
+                            f"Download {file_obj.name}",
+                            remote_path,
+                            str(temp_file)
+                        )
+                    
+                    elif source_dataset['platform'] == 'pennsieve':
+                        # Pennsieve download
+                        package_id = scan.get('package_id') or scan.get('scan_id')
+                        if package_id:
+                            download_success, _ = recovery.retry_with_backoff(
+                                source_agent.download_file,
+                                f"Download {file_obj.name} from Pennsieve",
+                                package_id,
+                                str(temp_file)
+                            )
+                        else:
+                            download_success = False
+                    
+                    elif source_dataset['platform'] == 'openneuro':
+                        # OpenNeuro download
+                        download_success, _ = recovery.retry_with_backoff(
+                            source_agent.download_file,
+                            f"Download {file_obj.name} from OpenNeuro",
+                            source_dataset.get('dataset_id_external'),
+                            bids_path,
+                            str(temp_file)
+                        )
+                    
+                    elif source_dataset['platform'] == 'dandi':
+                        # DANDI download (if file has asset ID)
+                        asset_id = scan.get('asset_id') or scan.get('scan_id')
+                        if asset_id:
+                            download_success, _ = recovery.retry_with_backoff(
+                                source_agent.download_file,
+                                f"Download {file_obj.name} from DANDI",
+                                asset_id,
+                                str(temp_file)
+                            )
+                        else:
+                            download_success = False
+                    
+                    elif source_dataset['platform'] == 'xnat':
+                        # XNAT download
+                        project_id = source_dataset.get('dataset_id_external')
+                        experiment_id = scan.get('experiment_id') or f"{subject_id}_MR1"
+                        scan_id = scan.get('scan_id') or scan.get('package_id')
+                        
+                        if project_id and experiment_id and scan_id:
+                            # XNAT needs custom download logic
+                            try:
+                                import xnat
+                                with xnat.connect(
+                                    source_dataset.get('server_url'),
+                                    user=source_dataset.get('api_key_encrypted'),
+                                    password=source_dataset.get('api_secret_encrypted')
+                                ) as session:
+                                    exp = session.projects[project_id].subjects[subject_id].experiments[experiment_id]
+                                    scan_obj = exp.scans[scan_id]
+                                    
+                                    for resource in scan_obj.resources.values():
+                                        for file in resource.files.values():
+                                            if file.label == file_obj.name:
+                                                file.download(str(temp_file))
+                                                download_success = True
+                                                break
+                            except Exception as e:
+                                logger.error(f"XNAT download failed: {e}")
+                                download_success = False
+                        else:
+                            download_success = False
+                    
+                    else:
+                        download_success = False
+                        status_text.warning(f"Cached transfer from {source_dataset['platform']} not supported")
+                    
+                    # Upload to destination
+                    if download_success:
+                        if dest_dataset['platform'] == 'local':
+                            # Copy to local destination
+                            import shutil
+                            local_dest = Path(dest_dataset.get('root_path', './data')) / bids_path
+                            local_dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(str(temp_file), str(local_dest))
+                            success = True
+                        elif dest_dataset['platform'] in ['hpc', 'remote_server']:
+                            base_path = dest_dataset.get('dataset_id_external', '/data/bids')
+                            dest_path = f"{base_path}/{bids_path}"
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name}",
+                                str(temp_file),
+                                dest_path
+                            )
+                        elif dest_dataset['platform'] == 'xnat':
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name} to XNAT",
+                                local_path=str(temp_file),
+                                project_id=dest_dataset.get('dataset_id_external'),
+                                subject_id=subject_id
+                            )
+                        elif dest_dataset['platform'] == 'pennsieve':
+                            remote_dir = str(Path(bids_path).parent)
+                            success, _ = recovery.retry_with_backoff(
+                                dest_agent.upload_file,
+                                f"Upload {file_obj.name} to Pennsieve",
+                                local_path=str(temp_file),
+                                dataset_name=dest_dataset.get('dataset_id_external') or dest_dataset['name'],
+                                remote_path=remote_dir,
+                                api_key=dest_dataset.get('api_key_encrypted'),
+                                api_secret=dest_dataset.get('api_secret_encrypted')
+                            )
+                    else:
+                        success = False
+                    
+                    # Cleanup temp file
+                    try:
+                        temp_file.unlink()
+                    except:
+                        pass
+                
+                if success:
+                    # Verify transfer integrity if requested (v3.1.1+)
+                    if verify and transfer_mode == 'cached':
+                        if dest_dataset['platform'] == 'local':
+                            # Verify local file
+                            local_dest = Path(dest_dataset.get('root_path', './data')) / bids_path
+                            if not local_dest.exists():
+                                st.warning(f"Transfer verification failed: {local_dest.name} not found")
+                                transfer_success = False
+                                break
+                            
+                            # Verify size
+                            expected_size = scan.get('file_size', 0)
+                            actual_size = local_dest.stat().st_size
+                            
+                            if expected_size > 0 and actual_size != expected_size:
+                                st.warning(f"Size mismatch: {local_dest.name} (expected {expected_size}, got {actual_size})")
+                                transfer_success = False
+                                break
+                    
+                    transferred_count += 1
+                else:
+                    transfer_success = False
+                    break
+            
+            except Exception as e:
+                error_msg = handle_agent_error(e, source_dataset['platform'], 'transfer')
+                st.error(f"Error transferring subject {subject_id}: {error_msg}")
+                transfer_success = False
+        
+        subject_elapsed = time.time() - subject_start_time
+        
+        if transfer_success and transferred_count > 0:
+            successful += 1
+            transfer_log.append({
+                'subject': subject_id,
+                'status': '[OK] Success',
+                'files': transferred_count,
+                'time': f"{subject_elapsed:.1f}s"
+            })
+        else:
+            failed += 1
+            transfer_log.append({
+                'subject': subject_id,
+                'status': '[X] Failed',
+                'files': transferred_count,
+                'time': f"{subject_elapsed:.1f}s"
+            })
+        
+        # Update progress
+        progress_bar.progress(min((i + 1) / total_subjects, 0.99))
+        
+        # Update details
+        with details_expander:
+            if transfer_log:
+                import pandas as pd
+                log_df = pd.DataFrame(transfer_log)
+                st.dataframe(log_df, use_container_width=True, hide_index=True)
+    
+    # Complete
+    progress_bar.progress(1.0)
+    total_elapsed = time.time() - start_time
+    
+    status_text.empty()
+    
+    if successful > 0:
+        st.success(f"""
+        [OK] **Transfer Complete!**  
+        **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
+        **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
+        **Avg Time/Subject**: {total_elapsed/successful:.1f}s
+        """)
+    
+    if failed > 0:
+        st.error(f"[X] {failed} subjects failed to transfer")
+    
+    # Save transfer session to history
+    database.execute_query("""
+        INSERT INTO metadata (key, value) 
+        VALUES (?, ?)
+    """, (
+        f"transfer_session_{int(time.time())}",
+        json.dumps({
+            'timestamp': datetime.now().isoformat(),
+            'source_platform': source_dataset['platform'],
+            'source_name': source_dataset['name'],
+            'dest_platform': dest_dataset['platform'],
+            'dest_name': dest_dataset['name'],
+            'total_subjects': total_subjects,
+            'successful': successful,
+            'failed': failed,
+            'duration': total_elapsed,
+            'mode': transfer_mode
+        })
+    ))
+    
+    # Show failed transfers if any
+    failed_list = recovery.get_failed_transfers()
+    if failed_list:
+        st.warning(f"[WARNING] {len(failed_list)} file(s) failed after {recovery.max_retries + 1} attempts")
+        with st.expander("View Failed Transfers"):
+            for failure in failed_list:
+                st.markdown(f"- **{failure['operation']}**: {failure['error']} ({failure['attempts']} attempts)")
+    
+    # Cleanup temp directory
+    try:
+        import shutil
+        temp_dir = Path('./data/temp_transfer')
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+    except:
+        pass
+    
+    time.sleep(2)
+
+
 def main():
     """Main application entry point."""
     # Initialize session state
     init_session_state()
+    
+    # Auto-initialize database (v3.1.1+)
+    if st.session_state.db is None:
+        st.session_state.db = Database()
+        print("[OK] Database initialized automatically")
+    
+    # Initialize cache manager (v3.1.1+)
+    if 'cache_manager' not in st.session_state:
+        st.session_state.cache_manager = CacheManager()
+    
+    # Initialize pagination settings (v3.1.1+)
+    if 'subjects_per_page' not in st.session_state:
+        st.session_state.subjects_per_page = 25
+    if 'current_page_num' not in st.session_state:
+        st.session_state.current_page_num = 1
     
     # Render sidebar
     render_sidebar()
@@ -3234,22 +5276,26 @@ def main():
     # Route to appropriate page
     page = st.session_state.current_page
     
-    if page == 'setup' or not st.session_state.setup_complete:
-        page_setup()
+    if page == 'home' or page == 'dashboard':
+        page_dashboard()
     elif page == 'manage_datasets':
         page_manage_datasets()
-    elif page == 'dashboard':
-        page_dashboard()
     elif page == 'subjects':
         page_subjects()
     elif page == 'subject_detail':
         page_subject_detail()
     elif page == 'downloads':
         page_downloads()
+    elif page == 'transfer':
+        page_transfer()
     elif page == 'qc':
         page_qc()
     elif page == 'export':
         page_export()
+    elif page == 'viewer':
+        # Viewer page accessed via subject detail page
+        st.info("Access viewer from Subject Detail page")
+        page_dashboard()
     else:
         page_dashboard()
 

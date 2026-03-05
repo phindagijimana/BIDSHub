@@ -1,5 +1,5 @@
 """
-Pennsieve Client for Data Explorer.
+Pennsieve Client for BIDSHub.
 
 Provides interface to Pennsieve platform for file metadata and downloads.
 """

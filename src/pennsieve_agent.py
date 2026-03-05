@@ -1,5 +1,5 @@
 """
-Pennsieve Agent Integration for Data Explorer.
+Pennsieve Agent Integration for BIDSHub.
 
 Wraps Pennsieve CLI commands for dataset mapping, downloads, and uploads.
 Provides Python interface for GUI interactions.
@@ -11,6 +11,10 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
 import json
+import csv
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PennsieveAgent:
@@ -135,18 +139,18 @@ class PennsieveAgent:
             
             if process.returncode == 0:
                 if progress_callback:
-                    progress_callback("✓ Dataset mapping complete")
+                    progress_callback("Dataset mapping complete")
                 return True
             else:
                 error = process.stderr.read()
                 if progress_callback:
-                    progress_callback(f"✗ Mapping failed: {error}")
+                    progress_callback(f"Mapping failed: {error}")
                 print(f"Mapping error: {error}")
                 return False
                 
         except Exception as e:
             if progress_callback:
-                progress_callback(f"✗ Error: {e}")
+                progress_callback(f"Error: {e}")
             print(f"Exception during mapping: {e}")
             return False
     
@@ -208,18 +212,18 @@ class PennsieveAgent:
             
             if process.returncode == 0:
                 if progress_callback:
-                    progress_callback(100, "✓ Download complete")
+                    progress_callback(100, "Download complete")
                 return True
             else:
                 error = process.stderr.read()
                 if progress_callback:
-                    progress_callback(0, f"✗ Download failed: {error}")
+                    progress_callback(0, f"Download failed: {error}")
                 print(f"Download error: {error}")
                 return False
                 
         except Exception as e:
             if progress_callback:
-                progress_callback(0, f"✗ Error: {e}")
+                progress_callback(0, f"Error: {e}")
             print(f"Exception during download: {e}")
             return False
     
@@ -296,7 +300,7 @@ class PennsieveAgent:
             
             if not local_file.exists():
                 if progress_callback:
-                    progress_callback(0, f"✗ File not found: {local_path}")
+                    progress_callback(0, f"File not found: {local_path}")
                 return False
             
             if progress_callback:
@@ -353,18 +357,18 @@ class PennsieveAgent:
             
             if process.returncode == 0:
                 if progress_callback:
-                    progress_callback(100, "✓ Upload complete")
+                    progress_callback(100, "Upload complete")
                 return True
             else:
                 error = process.stderr.read()
                 if progress_callback:
-                    progress_callback(0, f"✗ Upload failed: {error}")
+                    progress_callback(0, f"Upload failed: {error}")
                 print(f"Upload error: {error}")
                 return False
                 
         except Exception as e:
             if progress_callback:
-                progress_callback(0, f"✗ Error: {e}")
+                progress_callback(0, f"Error: {e}")
             print(f"Exception during upload: {e}")
             return False
     
@@ -421,6 +425,97 @@ class PennsieveAgent:
             progress_callback(total, total, "Upload complete")
         
         return results
+    
+    def upload_qc_csv(self,
+                      csv_path: str,
+                      dataset_name: str,
+                      api_key: str,
+                      api_secret: str,
+                      remote_folder: str = 'derivatives/qc',
+                      progress_callback: Callable[[Optional[float], str], None] = None) -> bool:
+        """
+        Upload QC results CSV to Pennsieve dataset (v3.1+).
+        
+        This is a specialized wrapper around upload_file for QC CSV uploads.
+        The CSV will be uploaded to derivatives/qc/ folder by default (BIDS convention).
+        
+        Args:
+            csv_path: Path to local QC CSV file
+            dataset_name: Target Pennsieve dataset name
+            api_key: Pennsieve API key
+            api_secret: Pennsieve API secret
+            remote_folder: Remote directory (default: derivatives/qc)
+            progress_callback: Optional callback(progress_pct, message)
+            
+        Returns:
+            bool: True if upload successful
+        """
+        try:
+            csv_file = Path(csv_path)
+            
+            if not csv_file.exists():
+                msg = f"QC CSV file not found: {csv_path}"
+                if progress_callback:
+                    progress_callback(0, msg)
+                print(msg)
+                return False
+            
+            if progress_callback:
+                progress_callback(0, f"Preparing to upload QC results to Pennsieve...")
+            
+            # Validate CSV format before upload
+            try:
+                with open(csv_path, 'r') as f:
+                    reader = csv.DictReader(f)
+                    required_fields = ['scan_id', 'subject_id', 'qc_status']
+                    
+                    if not all(field in reader.fieldnames for field in required_fields):
+                        msg = "Invalid QC CSV format: missing required columns"
+                        if progress_callback:
+                            progress_callback(0, msg)
+                        print(msg)
+                        return False
+                    
+                    # Count rows
+                    row_count = sum(1 for _ in reader)
+                    
+                if progress_callback:
+                    progress_callback(10, f"CSV validated: {row_count} QC records")
+            
+            except Exception as e:
+                msg = f"CSV validation failed: {e}"
+                if progress_callback:
+                    progress_callback(0, msg)
+                print(msg)
+                return False
+            
+            # Upload using existing upload_file method
+            if progress_callback:
+                progress_callback(20, f"Uploading to {remote_folder}/")
+            
+            success = self.upload_file(
+                local_path=csv_path,
+                dataset_name=dataset_name,
+                remote_path=remote_folder,
+                api_key=api_key,
+                api_secret=api_secret,
+                progress_callback=progress_callback
+            )
+            
+            if success:
+                msg = f"[OK] QC CSV uploaded successfully to {remote_folder}/{csv_file.name}"
+                if progress_callback:
+                    progress_callback(100, msg)
+                print(msg)
+            
+            return success
+            
+        except Exception as e:
+            msg = f"Error uploading QC CSV: {e}"
+            if progress_callback:
+                progress_callback(0, msg)
+            print(msg)
+            return False
     
     # ===== FILE STATUS OPERATIONS =====
     
@@ -554,6 +649,58 @@ class PennsieveAgent:
         except Exception as e:
             print(f"Error getting remote structure: {e}")
             return {'subjects': [], 'sessions': {}, 'files': {}}
+    
+    def get_subjects_with_metadata(self, 
+                                   dataset_name: str,
+                                   api_key: str,
+                                   api_secret: str) -> List[Dict]:
+        """
+        Fetch subject list with metadata from Pennsieve dataset.
+        
+        Args:
+            dataset_name: Pennsieve dataset name
+            api_key: Pennsieve API key
+            api_secret: Pennsieve API secret
+            
+        Returns:
+            list: List of dicts with subject info
+        """
+        try:
+            structure = self.get_remote_dataset_structure(dataset_name, api_key, api_secret)
+            subjects_list = structure.get('subjects', [])
+            sessions_dict = structure.get('sessions', {})
+            
+            if not subjects_list:
+                logger.warning(f"No subjects found in dataset {dataset_name}")
+                return []
+            
+            # For Pennsieve, we'd need to check if participants.tsv is available
+            # For now, return basic subject list
+            result = []
+            for subject_id in subjects_list:
+                sessions = sessions_dict.get(subject_id, [])
+                
+                result.append({
+                    'subject_id': f'sub-{subject_id}' if not subject_id.startswith('sub-') else subject_id,
+                    'age': None,
+                    'sex': None,
+                    'diagnosis': None,
+                    'participant_group': None,
+                    'handedness': None,
+                    'site': None,
+                    'sessions': [f'ses-{s}' if not s.startswith('ses-') else s for s in sessions],
+                    'has_anat': False,
+                    'has_func': False,
+                    'has_dwi': False,
+                    'has_fmap': False,
+                    'metadata': {}
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching subjects from {dataset_name}: {e}")
+            return []
     
     def get_directory_status(self, directory_path: str) -> Dict:
         """

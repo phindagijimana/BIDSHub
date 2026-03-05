@@ -1,5 +1,5 @@
 """
-Download Manager for Data Explorer.
+Download Manager for BIDSHub.
 
 Handles concurrent downloads from Pennsieve with progress tracking
 and queue management.
@@ -16,20 +16,26 @@ import queue
 
 
 class DownloadManager:
-    """Manages concurrent downloads from Pennsieve."""
+    """Manages concurrent downloads from cloud platforms."""
     
-    def __init__(self, ps_client, database, max_concurrent=3):
+    def __init__(self, ps_client=None, database=None, max_concurrent=3, agent_factory=None,
+                 upload_destination=None):
         """
         Initialize download manager.
         
         Args:
-            ps_client: PennsieveClient instance
+            ps_client: PennsieveClient instance (deprecated, use agent_factory)
             database: Database instance
             max_concurrent: Maximum concurrent downloads
+            agent_factory: AgentFactory instance for per-dataset agents (v2.2+)
+            upload_destination: Optional dict with {'platform': str, 'dataset_id': int} (v3.1.1+)
+                              Supported platforms: pennsieve, xnat, hpc, remote_server
         """
-        self.ps_client = ps_client
+        self.ps_client = ps_client  # Deprecated, kept for backward compatibility
+        self.agent_factory = agent_factory
         self.db = database
         self.max_concurrent = max_concurrent
+        self.upload_destination = upload_destination  # v3.1+
         
         # Thread pool for downloads
         self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
@@ -44,6 +50,10 @@ class DownloadManager:
         
         # Lock for thread safety
         self.lock = threading.Lock()
+        
+        # Performance optimization (v3.1.1+)
+        self.batch_size = 10  # Process subjects in batches
+        self.connection_pool_enabled = True
     
     def add_to_queue(self, scan_id: int, subject_id: str, 
                     file_path: str, package_id: str,
@@ -97,12 +107,13 @@ class DownloadManager:
         items = self.get_queue_items('queued')
         return sum(item.get('file_size_bytes', 0) for item in items)
     
-    def start_downloads(self, callback: Callable = None) -> bool:
+    def start_downloads(self, callback: Callable = None, batch_mode: bool = True) -> bool:
         """
-        Start processing the download queue.
+        Start processing the download queue (v3.1.1+ with batch optimization).
         
         Args:
             callback: Optional callback function for progress updates
+            batch_mode: Enable batch processing for improved throughput (default: True)
             
         Returns:
             bool: True if started successfully
@@ -118,9 +129,15 @@ class DownloadManager:
             if not queued:
                 return False
             
-            # Submit download tasks
-            for item in queued[:self.max_concurrent]:
-                self._submit_download(item, callback)
+            # Batch processing (v3.1.1+)
+            if batch_mode:
+                batch_count = min(self.batch_size, self.max_concurrent * 2)
+                for item in queued[:batch_count]:
+                    self._submit_download(item, callback)
+            else:
+                # Original behavior: submit up to max_concurrent
+                for item in queued[:self.max_concurrent]:
+                    self._submit_download(item, callback)
             
             return True
             
@@ -189,6 +206,27 @@ class DownloadManager:
             success = self.ps_client.download_file(package_id, file_path)
             
             if success:
+                # Verify file integrity (v3.1.1+)
+                if callback:
+                    callback(queue_id, 100.0, 'verifying integrity')
+                
+                file_exists = os.path.exists(file_path)
+                file_size_valid = False
+                
+                if file_exists:
+                    actual_size = os.path.getsize(file_path)
+                    expected_size = queue_item.get('file_size_bytes', 0)
+                    
+                    if expected_size > 0:
+                        file_size_valid = (actual_size == expected_size)
+                        if not file_size_valid:
+                            print(f"Warning: Size mismatch for {file_path}: expected {expected_size}, got {actual_size}")
+                    else:
+                        file_size_valid = True  # No expected size to compare
+                
+                if not file_exists or not file_size_valid:
+                    raise Exception(f"File integrity check failed: exists={file_exists}, size_valid={file_size_valid}")
+                
                 # Update scan status
                 self.db.update_scan_status(
                     scan_id=scan_id,
@@ -205,6 +243,15 @@ class DownloadManager:
                 
                 if callback:
                     callback(queue_id, 100.0, 'completed')
+                
+                # Post-download upload to destination platform if configured (v3.1.1+)
+                if self.upload_destination and self.upload_destination.get('platform'):
+                    try:
+                        self._upload_to_destination(file_path, queue_item, callback)
+                    except Exception as upload_error:
+                        print(f"Warning: Post-download upload failed for {file_path}: {upload_error}")
+                        if callback:
+                            callback(queue_id, 100.0, f'completed (upload failed: {upload_error})')
                 
                 return True
             else:
@@ -234,6 +281,144 @@ class DownloadManager:
             # Start next queued download if available
             if not self.is_paused:
                 self._start_next_download(callback)
+    
+    def _upload_to_destination(self, local_file_path: str, queue_item: Dict, 
+                              callback: Callable = None) -> bool:
+        """
+        Upload downloaded file to destination platform (v3.1.1+).
+        
+        Supports: Pennsieve, XNAT, HPC, Remote Server
+        Called automatically after download if upload_destination is configured.
+        
+        Args:
+            local_file_path: Path to downloaded file
+            queue_item: Queue item dict with subject_id, scan info
+            callback: Progress callback function
+            
+        Returns:
+            bool: True if upload successful
+        """
+        try:
+            if not self.upload_destination:
+                return False
+            
+            dest_platform = self.upload_destination.get('platform')
+            dest_dataset_id = self.upload_destination.get('dataset_id')
+            
+            if not dest_platform or not dest_dataset_id:
+                return False
+            
+            # Get destination dataset info
+            dest_dataset = self.db.get_dataset(dest_dataset_id)
+            if not dest_dataset:
+                print(f"Destination dataset {dest_dataset_id} not found")
+                return False
+            
+            file_path_obj = Path(local_file_path)
+            
+            if callback:
+                callback(queue_item['id'], 100.0, f'uploading to {dest_dataset["name"]}')
+            
+            # Get agent via factory
+            if not self.agent_factory:
+                print("AgentFactory not available for upload")
+                return False
+            
+            try:
+                agent = self.agent_factory.get_agent(dest_dataset_id)
+            except Exception as e:
+                print(f"Failed to create agent for destination: {e}")
+                return False
+            
+            # Platform-specific upload logic
+            success = False
+            
+            if dest_platform == 'pennsieve':
+                # Determine remote path using standardized BIDS utils (v3.1.1+)
+                from src.bids_utils import extract_bids_path
+                bids_path = extract_bids_path(local_file_path)
+                remote_path = str(Path(bids_path).parent)
+                
+                dataset_name = dest_dataset.get('dataset_id_external') or dest_dataset['name']
+                api_key = dest_dataset.get('api_key_encrypted')
+                api_secret = dest_dataset.get('api_secret_encrypted')
+                
+                def upload_progress(pct, msg):
+                    if callback and pct:
+                        callback(queue_item['id'], 100.0, f'upload: {pct:.0f}%')
+                
+                success = agent.upload_file(
+                    local_path=local_file_path,
+                    dataset_name=dataset_name,
+                    remote_path=remote_path,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    progress_callback=upload_progress
+                )
+            
+            elif dest_platform == 'xnat':
+                # Extract subject_id from path
+                subject_id = queue_item.get('subject_id', 'unknown')
+                project_id = dest_dataset.get('dataset_id_external') or dest_dataset['name']
+                
+                def upload_progress(transferred, total):
+                    if callback and total > 0:
+                        pct = (transferred / total) * 100
+                        callback(queue_item['id'], 100.0, f'upload: {pct:.0f}%')
+                
+                success = agent.upload_file(
+                    local_path=local_file_path,
+                    project_id=project_id,
+                    subject_id=subject_id,
+                    progress_callback=upload_progress
+                )
+            
+            elif dest_platform in ['hpc', 'remote_server']:
+                # Determine remote path using standardized BIDS utils (v3.1.1+)
+                from src.bids_utils import extract_bids_path
+                bids_path = extract_bids_path(local_file_path)
+                
+                # Remote path: dataset_path/sub-XX/ses-XX/modality/file.nii.gz
+                base_path = dest_dataset.get('dataset_id_external', '/data/bids')
+                remote_file_path = f"{base_path}/{bids_path}"
+                
+                def upload_progress(transferred, total):
+                    if callback and total > 0:
+                        pct = (transferred / total) * 100
+                        callback(queue_item['id'], 100.0, f'upload: {pct:.0f}%')
+                
+                success = agent.upload_file(
+                    local_path=local_file_path,
+                    remote_path=remote_file_path,
+                    progress_callback=upload_progress
+                )
+            
+            else:
+                print(f"Upload not supported for platform: {dest_platform}")
+                return False
+            
+            if success:
+                print(f"[OK] Uploaded {file_path_obj.name} to {dest_dataset['name']} ({dest_platform})")
+                if callback:
+                    callback(queue_item['id'], 100.0, f'completed + uploaded to {dest_dataset["name"]}')
+                return True
+            else:
+                print(f"Upload to {dest_platform} failed for {local_file_path}")
+                return False
+            
+        except Exception as e:
+            print(f"Error uploading to destination: {e}")
+            return False
+    
+    def set_upload_destination(self, destination: Optional[Dict]):
+        """
+        Set upload destination for downloaded files (v3.1.1+).
+        
+        Args:
+            destination: Dict with {'platform': str, 'dataset_id': int} or None for local-only
+                        Supported platforms: pennsieve, xnat, hpc, remote_server
+        """
+        self.upload_destination = destination
     
     def _start_next_download(self, callback: Callable = None):
         """Start the next queued download if available."""
@@ -410,7 +595,7 @@ if __name__ == "__main__":
         from src.utils import format_file_size
         time_sec = estimate_download_time(size, 10.0)
         time_min = time_sec / 60
-        print(f"  {format_file_size(size):>10} → {time_min:.1f} minutes")
+        print(f"  {format_file_size(size):>10} -> {time_min:.1f} minutes")
     
     # Test disk space
     print("\nDisk Space:")

@@ -126,13 +126,13 @@ class CohortExporter:
             "BIDSVersion": "1.6.0",
             "DatasetType": "derivative",
             "GeneratedBy": [{
-                "Name": "Data Explorer Cohort Exporter",
+                "Name": "BIDSHub Cohort Exporter",
                 "Version": "1.5.0",
                 "Description": description or "Custom cohort exported from multiple datasets"
             }],
             "SourceDatasets": source_datasets,
             "HowToAcknowledge": "Please acknowledge the original data sources",
-            "Authors": ["Data Explorer User"],
+            "Authors": ["BIDSHub User"],
             "DatasetDOI": "",
             "License": "See source datasets for license information",
             "Acknowledgements": f"Data aggregated from {len(source_datasets)} source dataset(s)",
@@ -258,7 +258,7 @@ class CohortExporter:
 
 ## Overview
 
-This dataset is a custom cohort exported from Data Explorer v1.5.
+This dataset is a custom cohort exported from BIDSHub v1.5.
 
 **Export Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -285,7 +285,7 @@ for source dataset information.
 
 ## Export Details
 
-Exported using Data Explorer v1.5 Cohort Exporter.
+Exported using BIDSHub v1.5 Cohort Exporter.
 
 For questions or issues, please contact the dataset creator.
 """

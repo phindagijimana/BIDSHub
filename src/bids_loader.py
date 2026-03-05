@@ -1,5 +1,5 @@
 """
-BIDS Dataset Loader for Data Explorer.
+BIDS Dataset Loader for BIDSHub.
 
 Wraps PyBIDS to provide clean interface for loading and querying
 BIDS-structured neuroimaging datasets.
@@ -46,7 +46,7 @@ class BIDSLoader:
             indexer=indexer
         )
         
-        print(f"✓ Loaded {len(self.get_subjects())} subjects")
+        print(f"Loaded {len(self.get_subjects())} subjects")
     
     def get_subjects(self) -> List[str]:
         """
@@ -320,9 +320,9 @@ if __name__ == "__main__":
         
         # Check Pennsieve integration
         if loader.validate_pennsieve_structure():
-            print("\n✓ Pennsieve integration detected")
+            print("\nPennsieve integration detected")
         else:
-            print("\n✗ No Pennsieve integration found")
+            print("\nNo Pennsieve integration found")
         
     except Exception as e:
         print(f"Error: {e}")

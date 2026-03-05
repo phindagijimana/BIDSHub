@@ -1,5 +1,5 @@
 """
-Database initialization script for Data Explorer.
+Database initialization script for BIDSHub.
 
 Creates all required tables with proper schema, indexes, and constraints.
 """
@@ -9,12 +9,12 @@ import os
 from pathlib import Path
 
 
-def init_database(db_path='data/tracktbi.db'):
+def init_database(db_path='data/bidshub.db'):
     """
     Initialize the SQLite database with all required tables.
     
     Args:
-        db_path: Path to the database file
+        db_path: Path to the database file (default: data/bidshub.db)
         
     Returns:
         bool: True if successful, False otherwise
@@ -31,7 +31,7 @@ def init_database(db_path='data/tracktbi.db'):
         # Enable foreign keys
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        # Create datasets table (v1.5+)
+        # Create datasets table (v2.0+)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS datasets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,10 +41,11 @@ def init_database(db_path='data/tracktbi.db'):
                 api_secret_encrypted TEXT,
                 dataset_id_external TEXT,
                 root_path TEXT,
+                server_url TEXT,
                 status TEXT DEFAULT 'active',
                 created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_sync_date TIMESTAMP,
-                CHECK (platform IN ('pennsieve', 'openneuro')),
+                CHECK (platform IN ('local', 'pennsieve', 'openneuro', 'xnat', 'dandi')),
                 CHECK (status IN ('active', 'inactive', 'error'))
             )
         """)
@@ -225,7 +226,7 @@ def init_database(db_path='data/tracktbi.db'):
         # Insert initial metadata
         cursor.execute("""
             INSERT OR IGNORE INTO metadata (key, value) 
-            VALUES ('db_version', '1.5.0')
+            VALUES ('db_version', '2.0.0')
         """)
         
         cursor.execute("""
@@ -296,7 +297,7 @@ def verify_database(db_path='data/tracktbi.db'):
 
 
 if __name__ == "__main__":
-    print("Data Explorer - Database Initialization")
+    print("BIDSHub - Database Initialization")
     print("=" * 50)
     
     # Initialize database
