@@ -5009,10 +5009,10 @@ def page_viewer():
         
         st.markdown("---")
         
-        # Always render the viewer tabs
-        tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
+        # Try to load the image if a file is selected
+        nifti_img = None
+        img_data = None
         
-        # Try to load and display the image if a file is selected
         if file_loaded and file_path and os.path.exists(file_path):
             try:
                 with st.spinner("Loading NIfTI image..."):
@@ -5033,80 +5033,132 @@ def page_viewer():
                     
                     st.markdown("---")
                     
-                    # Render actual views in tabs
-                    with tab_axial:
-                        st.markdown("**Axial View** - Looking down from the top")
-                        slice_z = st.slider("Slice", 0, img_data.shape[2]-1, img_data.shape[2]//2, key="axial_slice")
-                        
-                        fig = go.Figure(data=go.Heatmap(
-                            z=np.rot90(img_data[:, :, slice_z]),
-                            colorscale='gray',
-                            showscale=True
-                        ))
-                        fig.update_layout(
-                            title=f"Axial Slice {slice_z}/{img_data.shape[2]-1}",
-                            xaxis_title="X",
-                            yaxis_title="Y",
-                            height=500
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    with tab_sagittal:
-                        st.markdown("**Sagittal View** - Looking from the side")
-                        slice_x = st.slider("Slice", 0, img_data.shape[0]-1, img_data.shape[0]//2, key="sagittal_slice")
-                        
-                        fig = go.Figure(data=go.Heatmap(
-                            z=np.rot90(img_data[slice_x, :, :]),
-                            colorscale='gray',
-                            showscale=True
-                        ))
-                        fig.update_layout(
-                            title=f"Sagittal Slice {slice_x}/{img_data.shape[0]-1}",
-                            xaxis_title="Y",
-                            yaxis_title="Z",
-                            height=500
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    with tab_coronal:
-                        st.markdown("**Coronal View** - Looking from the front")
-                        slice_y = st.slider("Slice", 0, img_data.shape[1]-1, img_data.shape[1]//2, key="coronal_slice")
-                        
-                        fig = go.Figure(data=go.Heatmap(
-                            z=np.rot90(img_data[:, slice_y, :]),
-                            colorscale='gray',
-                            showscale=True
-                        ))
-                        fig.update_layout(
-                            title=f"Coronal Slice {slice_y}/{img_data.shape[1]-1}",
-                            xaxis_title="X",
-                            yaxis_title="Z",
-                            height=500
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
             except Exception as e:
                 st.error(f"Failed to load NIfTI image: {str(e)}")
                 st.caption("Make sure the file is a valid NIfTI format (.nii or .nii.gz)")
+        
+        # Always render the viewer tabs with visualizations
+        tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
+        
+        with tab_axial:
+            st.markdown("**Axial View** - Looking down from the top")
+            
+            if img_data is not None:
+                slice_z = st.slider("Slice", 0, img_data.shape[2]-1, img_data.shape[2]//2, key="axial_slice")
                 
-                # Show empty placeholder in tabs
-                with tab_axial:
-                    st.info("Select a valid NIfTI file to view")
-                with tab_sagittal:
-                    st.info("Select a valid NIfTI file to view")
-                with tab_coronal:
-                    st.info("Select a valid NIfTI file to view")
-        else:
-            # Empty state - show placeholder in all tabs
-            with tab_axial:
-                st.info("Select a NIfTI file from the browser to visualize")
-                st.caption("The axial view will appear here once you load a file")
-            with tab_sagittal:
-                st.info("Select a NIfTI file from the browser to visualize")
-                st.caption("The sagittal view will appear here once you load a file")
-            with tab_coronal:
-                st.info("Select a NIfTI file from the browser to visualize")
-                st.caption("The coronal view will appear here once you load a file")
+                fig = go.Figure(data=go.Heatmap(
+                    z=np.rot90(img_data[:, :, slice_z]),
+                    colorscale='gray',
+                    showscale=True
+                ))
+                fig.update_layout(
+                    title=f"Axial Slice {slice_z}/{img_data.shape[2]-1}",
+                    xaxis_title="X",
+                    yaxis_title="Y",
+                    height=500,
+                    plot_bgcolor='#f0f0f0'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Show empty viewer with placeholder
+                fig = go.Figure()
+                fig.update_layout(
+                    title="Axial View",
+                    xaxis_title="X",
+                    yaxis_title="Y",
+                    height=500,
+                    plot_bgcolor='#f0f0f0',
+                    annotations=[{
+                        'text': 'Load a NIfTI file to view',
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'x': 0.5,
+                        'y': 0.5,
+                        'showarrow': False,
+                        'font': {'size': 16, 'color': '#888'}
+                    }]
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab_sagittal:
+            st.markdown("**Sagittal View** - Looking from the side")
+            
+            if img_data is not None:
+                slice_x = st.slider("Slice", 0, img_data.shape[0]-1, img_data.shape[0]//2, key="sagittal_slice")
+                
+                fig = go.Figure(data=go.Heatmap(
+                    z=np.rot90(img_data[slice_x, :, :]),
+                    colorscale='gray',
+                    showscale=True
+                ))
+                fig.update_layout(
+                    title=f"Sagittal Slice {slice_x}/{img_data.shape[0]-1}",
+                    xaxis_title="Y",
+                    yaxis_title="Z",
+                    height=500,
+                    plot_bgcolor='#f0f0f0'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Show empty viewer with placeholder
+                fig = go.Figure()
+                fig.update_layout(
+                    title="Sagittal View",
+                    xaxis_title="Y",
+                    yaxis_title="Z",
+                    height=500,
+                    plot_bgcolor='#f0f0f0',
+                    annotations=[{
+                        'text': 'Load a NIfTI file to view',
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'x': 0.5,
+                        'y': 0.5,
+                        'showarrow': False,
+                        'font': {'size': 16, 'color': '#888'}
+                    }]
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab_coronal:
+            st.markdown("**Coronal View** - Looking from the front")
+            
+            if img_data is not None:
+                slice_y = st.slider("Slice", 0, img_data.shape[1]-1, img_data.shape[1]//2, key="coronal_slice")
+                
+                fig = go.Figure(data=go.Heatmap(
+                    z=np.rot90(img_data[:, slice_y, :]),
+                    colorscale='gray',
+                    showscale=True
+                ))
+                fig.update_layout(
+                    title=f"Coronal Slice {slice_y}/{img_data.shape[1]-1}",
+                    xaxis_title="X",
+                    yaxis_title="Z",
+                    height=500,
+                    plot_bgcolor='#f0f0f0'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Show empty viewer with placeholder
+                fig = go.Figure()
+                fig.update_layout(
+                    title="Coronal View",
+                    xaxis_title="X",
+                    yaxis_title="Z",
+                    height=500,
+                    plot_bgcolor='#f0f0f0',
+                    annotations=[{
+                        'text': 'Load a NIfTI file to view',
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'x': 0.5,
+                        'y': 0.5,
+                        'showarrow': False,
+                        'font': {'size': 16, 'color': '#888'}
+                    }]
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 
 def page_transfer():
