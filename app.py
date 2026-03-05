@@ -2190,7 +2190,7 @@ def page_home():
             </div>
             <div class="quick-feature">
                 <div class="quick-feature-icon">•</div>
-                <span>Clinical-grade quality control workflows</span>
+                <span>Scan-level quality control with Pennsieve sync</span>
             </div>
         """, unsafe_allow_html=True)
     
