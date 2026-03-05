@@ -5062,21 +5062,26 @@ def page_viewer():
                     
                     nv.attachToCanvas(document.getElementById('canvas'));
                     
-                    // Load NIfTI from base64
+                    // Load NIfTI from base64 using Blob approach
                     const fileData = base64ToArrayBuffer('{file_b64}');
+                    const blob = new Blob([fileData], {{ type: 'application/gzip' }});
+                    const blobUrl = URL.createObjectURL(blob);
+                    
                     const volumeList = [{{
-                        url: '{file_name}',
-                        buffer: fileData,
+                        url: blobUrl,
+                        name: '{file_name}',
                         colormap: 'gray'
                     }}];
                     
-                    nv.loadFromArrayBuffer(volumeList).then(() => {{
+                    nv.loadVolumes(volumeList).then(() => {{
                         nv.setSliceType(nv.sliceTypeMultiplanar);
                         nv.setClipPlane([0, 0, 90]);
                         console.log('NIfTI loaded successfully');
+                        URL.revokeObjectURL(blobUrl);
                     }}).catch(err => {{
                         console.error('Error loading NIfTI:', err);
                         document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
+                        URL.revokeObjectURL(blobUrl);
                     }});
                 </script>
             </body>
