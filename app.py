@@ -2257,14 +2257,14 @@ def page_home():
     
     with col3:
         st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon-box">[QC]</div>
-                <h4 class="feature-card-title">Clinical Ready</h4>
-                <p class="feature-card-description">
-                    Scan-level QC with Pennsieve sync. Validated for TBI and epilepsy 
-                    research with robust BIDS compliance checking.
-                </p>
-            </div>
+        <div class="feature-card">
+            <div class="feature-icon-box">[QC]</div>
+            <h4 class="feature-card-title">Research Ready</h4>
+            <p class="feature-card-description">
+                Scan-level QC with Pennsieve sync. Validated for TBI and epilepsy 
+                research with robust BIDS compliance checking.
+            </p>
+        </div>
         """, unsafe_allow_html=True)
 
 
