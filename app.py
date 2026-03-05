@@ -5056,11 +5056,8 @@ def page_viewer():
                 # Check if already downloaded
                 if not local_file_path.exists():
                     with st.spinner(f"Downloading from DANDI... (this may take a moment for large files)"):
-                        # Get agent
-                        agent = st.session_state.agent_factory.get_agent(
-                            platform='dandi',
-                            dataset_id=dataset_id
-                        )
+                        # Get agent for this dataset (platform determined automatically)
+                        agent = st.session_state.agent_factory.get_agent(dataset_id)
                         
                         # Download file
                         success = agent.download_file(
