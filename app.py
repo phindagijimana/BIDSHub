@@ -998,14 +998,6 @@ def render_sidebar():
             st.session_state.current_page = 'subjects'
             st.rerun()
         
-        # Viewer
-        viewer_label = "> Viewer" if current == 'viewer' else "Viewer"
-        if st.button(viewer_label, 
-                    use_container_width=True,
-                    key="nav_viewer"):
-            st.session_state.current_page = 'viewer'
-            st.rerun()
-        
         # QC Dashboard
         qc_label = "> QC Dashboard" if current == 'qc' else "QC Dashboard"
         if st.button(qc_label, 
