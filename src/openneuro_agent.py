@@ -444,6 +444,7 @@ class OpenNeuroAgent:
         """
         try:
             import requests
+            from collections import defaultdict
             
             # OpenNeuro GraphQL API
             graphql_url = 'https://openneuro.org/crn/graphql'

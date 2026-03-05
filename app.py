@@ -9,10 +9,13 @@ import streamlit as st
 import os
 import pandas as pd
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -1547,12 +1550,17 @@ def page_manage_datasets():
                                                 participant_group=subject_data.get('participant_group')
                                             )
                                             
-                                            # Add sessions
-                                            for session in subject_data.get('sessions', []):
+                                            # Add sessions (or create default if none)
+                                            sessions = subject_data.get('sessions', [])
+                                            if not sessions:
+                                                # Dataset doesn't use sessions, create default entry
+                                                sessions = ['ses-default']
+                                            
+                                            for session in sessions:
                                                 st.session_state.db.add_subject_session(
                                                     subject_id=subject_id,
                                                     dataset_id=dataset['id'],
-                                                    session=session
+                                                    session_id=session
                                                 )
                                             
                                             # Add scans
@@ -4954,8 +4962,22 @@ def page_viewer():
                         # Get scans for selected session
                         scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
                         
+                        # Check if this is an OpenNeuro dataset
+                        selected_dataset = next((d for d in datasets if d['id'] == selected_dataset_id), None)
+                        is_openneuro = selected_dataset and selected_dataset.get('platform') == 'openneuro'
+                        
                         if not scans:
-                            st.info(f"No scans found for session {selected_session_id}")
+                            if is_openneuro:
+                                st.info(f"OpenNeuro datasets must be downloaded before viewing.")
+                                st.markdown("""
+                                **To view OpenNeuro datasets:**
+                                1. Go to **Download Manager**
+                                2. Select subjects/sessions to download
+                                3. Download the data locally
+                                4. Return here and use **'From File System'** mode to browse downloaded files
+                                """)
+                            else:
+                                st.info(f"No scans found for session {selected_session_id}")
                         
                         # Filter only NIfTI files
                         nifti_scans = [
@@ -4963,7 +4985,7 @@ def page_viewer():
                             if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
                         ]
                         
-                        if not nifti_scans:
+                        if not nifti_scans and scans:
                             st.warning("No NIfTI files found in this session")
                         
                         # Scan selector with modality info
