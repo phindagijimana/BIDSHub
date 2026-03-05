@@ -5086,22 +5086,30 @@ def page_viewer():
                 st.markdown(f"**File:** {Path(local_file_path).name}")
                 st.caption(f"Path: {local_file_path}")
             
-            # Get file info using nibabel
-            import nibabel as nib
-            try:
-                nifti_img = nib.load(str(local_file_path))
-                img_data = nifti_img.get_fdata()
-                
-                col_info1, col_info2, col_info3 = st.columns(3)
-                with col_info1:
-                    st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
-                with col_info2:
-                    voxel_sizes = nifti_img.header.get_zooms()
-                    st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
-                with col_info3:
-                    st.metric("Data Type", str(img_data.dtype))
-            except Exception as e:
-                st.error(f"Failed to load file info: {str(e)}")
+            # Check file size before attempting to load (max 500MB for browser-based viewing)
+            file_size_mb = os.path.getsize(local_file_path) / (1024 * 1024)
+            
+            if file_size_mb > 500:
+                st.warning(f"⚠️ File is too large for browser-based viewing ({file_size_mb:.1f} MB). Files larger than 500 MB may cause browser memory issues.")
+                st.info("**Tip:** For large files, consider using external tools like FSLeyes or ITK-SNAP for visualization.")
+                file_loaded = False
+            else:
+                # Get file info using nibabel
+                import nibabel as nib
+                try:
+                    nifti_img = nib.load(str(local_file_path))
+                    img_data = nifti_img.get_fdata()
+                    
+                    col_info1, col_info2, col_info3 = st.columns(3)
+                    with col_info1:
+                        st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
+                    with col_info2:
+                        voxel_sizes = nifti_img.header.get_zooms()
+                        st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
+                    with col_info3:
+                        st.metric("Data Type", str(img_data.dtype))
+                except Exception as e:
+                    st.error(f"Failed to load file info: {str(e)}")
         else:
             if not file_loaded:
                 st.info("No file loaded. Select a NIfTI file from the browser on the left.")
@@ -5112,7 +5120,7 @@ def page_viewer():
         import streamlit.components.v1 as components
         import base64
         
-        # Prepare file data for niivue
+        # Prepare file data for niivue (file size already checked above)
         if file_loaded and local_file_path and os.path.exists(local_file_path):
             # Read file and convert to base64 for embedding
             with open(local_file_path, 'rb') as f:
@@ -5123,136 +5131,136 @@ def page_viewer():
             
             # niivue HTML with file loaded
             niivue_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    html, body {{ 
-                        margin: 0; 
-                        padding: 0; 
-                        width: 100%;
-                        height: 100%;
-                        overflow: hidden;
-                    }}
-                    #canvas {{ 
-                        width: 100vw; 
-                        height: 700px;
-                        display: block;
-                    }}
-                </style>
-            </head>
-            <body>
-                <canvas id="canvas"></canvas>
-                <script src="https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"></script>
-                <script>
-                    // Convert base64 to ArrayBuffer
-                    function base64ToArrayBuffer(base64) {{
-                        const binaryString = atob(base64);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {{
-                            bytes[i] = binaryString.charCodeAt(i);
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        html, body {{ 
+                            margin: 0; 
+                            padding: 0; 
+                            width: 100%;
+                            height: 100%;
+                            overflow: hidden;
                         }}
-                        return bytes.buffer;
-                    }}
-                    
-                    // Initialize niivue with better defaults
-                    const nv = new niivue.Niivue({{
-                        show3Dcrosshair: true,
-                        backColor: [0, 0, 0, 1],
-                        crosshairColor: [1, 0, 0, 1],
-                        textHeight: 0.05,
-                        colorbarHeight: 0.05
-                    }});
-                    
-                    nv.attachToCanvas(document.getElementById('canvas'));
-                    
-                    // Load NIfTI from base64 using Blob approach
-                    const fileData = base64ToArrayBuffer('{file_b64}');
-                    const blob = new Blob([fileData], {{ type: 'application/gzip' }});
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    const volumeList = [{{
-                        url: blobUrl,
-                        name: '{file_name}',
-                        colormap: 'gray'
-                    }}];
-                    
-                    nv.loadVolumes(volumeList).then(() => {{
-                        nv.setSliceType(nv.sliceTypeMultiplanar);
-                        nv.setClipPlane([0, 0, 90]);
+                        #canvas {{ 
+                            width: 100vw; 
+                            height: 700px;
+                            display: block;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <canvas id="canvas"></canvas>
+                    <script src="https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"></script>
+                    <script>
+                        // Convert base64 to ArrayBuffer
+                        function base64ToArrayBuffer(base64) {{
+                            const binaryString = atob(base64);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {{
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }}
+                            return bytes.buffer;
+                        }}
                         
-                        // Ensure canvas fills and renders properly
-                        setTimeout(() => {{
-                            nv.drawScene();
-                        }}, 100);
+                        // Initialize niivue with better defaults
+                        const nv = new niivue.Niivue({{
+                            show3Dcrosshair: true,
+                            backColor: [0, 0, 0, 1],
+                            crosshairColor: [1, 0, 0, 1],
+                            textHeight: 0.05,
+                            colorbarHeight: 0.05
+                        }});
                         
-                        console.log('NIfTI loaded successfully');
-                        URL.revokeObjectURL(blobUrl);
-                    }}).catch(err => {{
-                        console.error('Error loading NIfTI:', err);
-                        document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
-                        URL.revokeObjectURL(blobUrl);
-                    }});
-                </script>
-            </body>
-            </html>
+                        nv.attachToCanvas(document.getElementById('canvas'));
+                        
+                        // Load NIfTI from base64 using Blob approach
+                        const fileData = base64ToArrayBuffer('{file_b64}');
+                        const blob = new Blob([fileData], {{ type: 'application/gzip' }});
+                        const blobUrl = URL.createObjectURL(blob);
+                        
+                        const volumeList = [{{
+                            url: blobUrl,
+                            name: '{file_name}',
+                            colormap: 'gray'
+                        }}];
+                        
+                        nv.loadVolumes(volumeList).then(() => {{
+                            nv.setSliceType(nv.sliceTypeMultiplanar);
+                            nv.setClipPlane([0, 0, 90]);
+                            
+                            // Ensure canvas fills and renders properly
+                            setTimeout(() => {{
+                                nv.drawScene();
+                            }}, 100);
+                            
+                            console.log('NIfTI loaded successfully');
+                            URL.revokeObjectURL(blobUrl);
+                        }}).catch(err => {{
+                            console.error('Error loading NIfTI:', err);
+                            document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
+                            URL.revokeObjectURL(blobUrl);
+                        }});
+                    </script>
+                </body>
+                </html>
             """
         else:
             # niivue HTML with placeholder
             niivue_html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body { 
-                        margin: 0; 
-                        padding: 0; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center; 
-                        height: 600px;
-                        background-color: #f0f0f0;
-                    }
-                    .placeholder {
-                        text-align: center;
-                        color: #888;
-                        font-family: sans-serif;
-                    }
-                    .placeholder h3 {
-                        margin: 0 0 10px 0;
-                        color: #555;
-                    }
-                    .views {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr;
-                        gap: 10px;
-                        margin-top: 20px;
-                    }
-                    .view-box {
-                        width: 150px;
-                        height: 150px;
-                        border: 2px dashed #ccc;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: #999;
-                        font-size: 14px;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="placeholder">
-                    <h3>NIfTI Viewer Ready</h3>
-                    <p>Load a NIfTI file from the browser to visualize</p>
-                    <div class="views">
-                        <div class="view-box">Axial</div>
-                        <div class="view-box">Sagittal</div>
-                        <div class="view-box">Coronal</div>
-                        <div class="view-box">3D</div>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { 
+                            margin: 0; 
+                            padding: 0; 
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center; 
+                            height: 600px;
+                            background-color: #f0f0f0;
+                        }
+                        .placeholder {
+                            text-align: center;
+                            color: #888;
+                            font-family: sans-serif;
+                        }
+                        .placeholder h3 {
+                            margin: 0 0 10px 0;
+                            color: #555;
+                        }
+                        .views {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 10px;
+                            margin-top: 20px;
+                        }
+                        .view-box {
+                            width: 150px;
+                            height: 150px;
+                            border: 2px dashed #ccc;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: #999;
+                            font-size: 14px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="placeholder">
+                        <h3>NIfTI Viewer Ready</h3>
+                        <p>Load a NIfTI file from the browser to visualize</p>
+                        <div class="views">
+                            <div class="view-box">Axial</div>
+                            <div class="view-box">Sagittal</div>
+                            <div class="view-box">Coronal</div>
+                            <div class="view-box">3D</div>
+                        </div>
                     </div>
-                </div>
-            </body>
-            </html>
+                </body>
+                </html>
             """
         
         # Render niivue viewer
