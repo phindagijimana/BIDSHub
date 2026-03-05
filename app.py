@@ -4986,12 +4986,6 @@ def page_viewer():
     with col_viewer:
         st.markdown("### Viewer")
         
-        # Always show the viewer interface
-        # Import libraries upfront
-        import nibabel as nib
-        import plotly.graph_objects as go
-        import numpy as np
-        
         # Check if file is loaded
         file_path = st.session_state.get('viewer_selected_file', '')
         file_loaded = 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded
@@ -5000,161 +4994,154 @@ def page_viewer():
         if file_loaded and file_path and os.path.exists(file_path):
             st.markdown(f"**File:** {Path(file_path).name}")
             st.caption(f"Path: {file_path}")
+            
+            # Get file info using nibabel
+            import nibabel as nib
+            try:
+                nifti_img = nib.load(file_path)
+                img_data = nifti_img.get_fdata()
+                
+                col_info1, col_info2, col_info3 = st.columns(3)
+                with col_info1:
+                    st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
+                with col_info2:
+                    voxel_sizes = nifti_img.header.get_zooms()
+                    st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
+                with col_info3:
+                    st.metric("Data Type", str(img_data.dtype))
+            except Exception as e:
+                st.error(f"Failed to load file info: {str(e)}")
         else:
             st.info("No file loaded. Select a NIfTI file from the browser on the left.")
         
         st.markdown("---")
         
-        # Try to load the image if a file is selected
-        nifti_img = None
-        img_data = None
+        # niivue viewer with 3-plane view (axial, sagittal, coronal)
+        import streamlit.components.v1 as components
+        import base64
         
+        # Prepare file data for niivue
         if file_loaded and file_path and os.path.exists(file_path):
-            try:
-                with st.spinner("Loading NIfTI image..."):
-                    nifti_img = nib.load(file_path)
-                    img_data = nifti_img.get_fdata()
-                    
-                    # Display image info
-                    st.success(f"Loaded successfully")
-                    
-                    col_info1, col_info2, col_info3 = st.columns(3)
-                    with col_info1:
-                        st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
-                    with col_info2:
-                        voxel_sizes = nifti_img.header.get_zooms()
-                        st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
-                    with col_info3:
-                        st.metric("Data Type", str(img_data.dtype))
-                    
-                    st.markdown("---")
-                    
-            except Exception as e:
-                st.error(f"Failed to load NIfTI image: {str(e)}")
-                st.caption("Make sure the file is a valid NIfTI format (.nii or .nii.gz)")
-        
-        # Always render the viewer tabs with visualizations
-        tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
-        
-        with tab_axial:
-            st.markdown("**Axial View** - Looking down from the top")
+            # Read file and convert to base64 for embedding
+            with open(file_path, 'rb') as f:
+                file_bytes = f.read()
+                file_b64 = base64.b64encode(file_bytes).decode()
             
-            if img_data is not None:
-                slice_z = st.slider("Slice", 0, img_data.shape[2]-1, img_data.shape[2]//2, key="axial_slice")
-                
-                fig = go.Figure(data=go.Heatmap(
-                    z=np.rot90(img_data[:, :, slice_z]),
-                    colorscale='gray',
-                    showscale=True
-                ))
-                fig.update_layout(
-                    title=f"Axial Slice {slice_z}/{img_data.shape[2]-1}",
-                    xaxis_title="X",
-                    yaxis_title="Y",
-                    height=500,
-                    plot_bgcolor='#f0f0f0'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                # Show empty viewer with placeholder
-                fig = go.Figure()
-                fig.update_layout(
-                    title="Axial View",
-                    xaxis_title="X",
-                    yaxis_title="Y",
-                    height=500,
-                    plot_bgcolor='#f0f0f0',
-                    annotations=[{
-                        'text': 'Load a NIfTI file to view',
-                        'xref': 'paper',
-                        'yref': 'paper',
-                        'x': 0.5,
-                        'y': 0.5,
-                        'showarrow': False,
-                        'font': {'size': 16, 'color': '#888'}
-                    }]
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with tab_sagittal:
-            st.markdown("**Sagittal View** - Looking from the side")
+            file_name = Path(file_path).name
             
-            if img_data is not None:
-                slice_x = st.slider("Slice", 0, img_data.shape[0]-1, img_data.shape[0]//2, key="sagittal_slice")
-                
-                fig = go.Figure(data=go.Heatmap(
-                    z=np.rot90(img_data[slice_x, :, :]),
-                    colorscale='gray',
-                    showscale=True
-                ))
-                fig.update_layout(
-                    title=f"Sagittal Slice {slice_x}/{img_data.shape[0]-1}",
-                    xaxis_title="Y",
-                    yaxis_title="Z",
-                    height=500,
-                    plot_bgcolor='#f0f0f0'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                # Show empty viewer with placeholder
-                fig = go.Figure()
-                fig.update_layout(
-                    title="Sagittal View",
-                    xaxis_title="Y",
-                    yaxis_title="Z",
-                    height=500,
-                    plot_bgcolor='#f0f0f0',
-                    annotations=[{
-                        'text': 'Load a NIfTI file to view',
-                        'xref': 'paper',
-                        'yref': 'paper',
-                        'x': 0.5,
-                        'y': 0.5,
-                        'showarrow': False,
-                        'font': {'size': 16, 'color': '#888'}
-                    }]
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            # niivue HTML with file loaded
+            niivue_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ margin: 0; padding: 0; }}
+                    #canvas {{ width: 100%; height: 600px; }}
+                </style>
+            </head>
+            <body>
+                <canvas id="canvas"></canvas>
+                <script src="https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"></script>
+                <script>
+                    // Convert base64 to ArrayBuffer
+                    function base64ToArrayBuffer(base64) {{
+                        const binaryString = atob(base64);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {{
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }}
+                        return bytes.buffer;
+                    }}
+                    
+                    // Initialize niivue
+                    const nv = new niivue.Niivue({{
+                        show3Dcrosshair: true,
+                        backColor: [0.95, 0.95, 0.95, 1],
+                        crosshairColor: [1, 0, 0, 1]
+                    }});
+                    
+                    nv.attachToCanvas(document.getElementById('canvas'));
+                    
+                    // Load NIfTI from base64
+                    const fileData = base64ToArrayBuffer('{file_b64}');
+                    const volumeList = [{{
+                        name: '{file_name}',
+                        buffer: fileData,
+                        colormap: 'gray'
+                    }}];
+                    
+                    nv.loadFromArrayBuffer(volumeList).then(() => {{
+                        nv.setSliceType(nv.sliceTypeMultiplanar);
+                        nv.setClipPlane([0, 0, 90]);
+                        console.log('NIfTI loaded successfully');
+                    }}).catch(err => {{
+                        console.error('Error loading NIfTI:', err);
+                        document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
+                    }});
+                </script>
+            </body>
+            </html>
+            """
+        else:
+            # niivue HTML with placeholder
+            niivue_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { 
+                        margin: 0; 
+                        padding: 0; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        height: 600px;
+                        background-color: #f0f0f0;
+                    }
+                    .placeholder {
+                        text-align: center;
+                        color: #888;
+                        font-family: sans-serif;
+                    }
+                    .placeholder h3 {
+                        margin: 0 0 10px 0;
+                        color: #555;
+                    }
+                    .views {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 10px;
+                        margin-top: 20px;
+                    }
+                    .view-box {
+                        width: 150px;
+                        height: 150px;
+                        border: 2px dashed #ccc;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #999;
+                        font-size: 14px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="placeholder">
+                    <h3>NIfTI Viewer Ready</h3>
+                    <p>Load a NIfTI file from the browser to visualize</p>
+                    <div class="views">
+                        <div class="view-box">Axial</div>
+                        <div class="view-box">Sagittal</div>
+                        <div class="view-box">Coronal</div>
+                        <div class="view-box">3D</div>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
         
-        with tab_coronal:
-            st.markdown("**Coronal View** - Looking from the front")
-            
-            if img_data is not None:
-                slice_y = st.slider("Slice", 0, img_data.shape[1]-1, img_data.shape[1]//2, key="coronal_slice")
-                
-                fig = go.Figure(data=go.Heatmap(
-                    z=np.rot90(img_data[:, slice_y, :]),
-                    colorscale='gray',
-                    showscale=True
-                ))
-                fig.update_layout(
-                    title=f"Coronal Slice {slice_y}/{img_data.shape[1]-1}",
-                    xaxis_title="X",
-                    yaxis_title="Z",
-                    height=500,
-                    plot_bgcolor='#f0f0f0'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                # Show empty viewer with placeholder
-                fig = go.Figure()
-                fig.update_layout(
-                    title="Coronal View",
-                    xaxis_title="X",
-                    yaxis_title="Z",
-                    height=500,
-                    plot_bgcolor='#f0f0f0',
-                    annotations=[{
-                        'text': 'Load a NIfTI file to view',
-                        'xref': 'paper',
-                        'yref': 'paper',
-                        'x': 0.5,
-                        'y': 0.5,
-                        'showarrow': False,
-                        'font': {'size': 16, 'color': '#888'}
-                    }]
-                )
-                st.plotly_chart(fig, use_container_width=True)
+        # Render niivue viewer
+        components.html(niivue_html, height=650, scrolling=False)
 
 
 def page_transfer():
