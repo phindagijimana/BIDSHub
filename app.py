@@ -998,6 +998,14 @@ def render_sidebar():
             st.session_state.current_page = 'subjects'
             st.rerun()
         
+        # Viewer
+        viewer_label = "> Viewer" if current == 'viewer' else "Viewer"
+        if st.button(viewer_label, 
+                    use_container_width=True,
+                    key="nav_viewer"):
+            st.session_state.current_page = 'viewer'
+            st.rerun()
+        
         # QC Dashboard
         qc_label = "> QC Dashboard" if current == 'qc' else "QC Dashboard"
         if st.button(qc_label, 
@@ -4777,12 +4785,251 @@ def page_export():
                     st.info("No download history available")
 
 
-def page_transfer():
-    """Data Transfer page with WinSCP-style dual-pane interface (v3.1.1+)."""
-    render_page_header('transfer', show_back_to_dashboard=True)
-    render_breadcrumb('transfer')
-    st.markdown('<h1 class="main-header">Data Transfer</h1>', 
+def page_viewer():
+    """Standalone NIfTI Viewer page with file browser (v3.1.2+)."""
+    render_page_header('viewer', show_back_to_dashboard=True)
+    render_breadcrumb('viewer')
+    st.markdown('<h1 class="main-header">NIfTI Viewer</h1>', 
                 unsafe_allow_html=True)
+    
+    if not st.session_state.db:
+        st.warning("Please complete setup first")
+        return
+    
+    st.markdown("Browse and visualize any NIfTI image from your indexed datasets")
+    
+    # Two-column layout: File browser (left) | Viewer (right)
+    col_browser, col_viewer = st.columns([1, 2], gap="large")
+    
+    with col_browser:
+        st.markdown("### File Browser")
+        
+        # Get all datasets
+        all_datasets = st.session_state.db.get_all_datasets(status='active')
+        
+        if not all_datasets:
+            st.info("No datasets available. Add datasets in Manage Datasets.")
+            return
+        
+        # Dataset selector
+        dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
+        selected_dataset_name = st.selectbox(
+            "Select Dataset",
+            options=list(dataset_options.keys()),
+            key="viewer_dataset_select"
+        )
+        
+        if selected_dataset_name:
+            selected_dataset_id = dataset_options[selected_dataset_name]
+            
+            # Get subjects for selected dataset
+            subjects = st.session_state.db.get_all_subjects(filters={'dataset_id': selected_dataset_id})
+            
+            if not subjects:
+                st.info("No subjects indexed. Click 'Sync' in Manage Datasets.")
+                return
+            
+            # Subject selector
+            subject_options = [s['subject_id'] for s in subjects]
+            selected_subject_id = st.selectbox(
+                "Select Subject",
+                options=subject_options,
+                key="viewer_subject_select"
+            )
+            
+            if selected_subject_id:
+                # Get sessions for selected subject
+                sessions = st.session_state.db.get_subject_sessions(selected_subject_id, selected_dataset_id)
+                
+                if not sessions:
+                    st.info(f"No sessions found for {selected_subject_id}")
+                    return
+                
+                # Session selector
+                session_ids = [s['session_id'] for s in sessions]
+                selected_session_id = st.selectbox(
+                    "Select Session",
+                    options=session_ids,
+                    key="viewer_session_select"
+                )
+                
+                if selected_session_id:
+                    # Get scans for selected session
+                    scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
+                    
+                    if not scans:
+                        st.info(f"No scans found for session {selected_session_id}")
+                        return
+                    
+                    # Filter only NIfTI files
+                    nifti_scans = [
+                        s for s in scans 
+                        if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
+                    ]
+                    
+                    if not nifti_scans:
+                        st.warning("No NIfTI files found in this session")
+                        return
+                    
+                    # Scan selector with modality info
+                    scan_labels = []
+                    for scan in nifti_scans:
+                        modality = scan.get('modality', 'unknown')
+                        suffix = scan.get('suffix', '')
+                        label = f"{modality}_{suffix}" if suffix else modality
+                        scan_labels.append(label)
+                    
+                    selected_scan_idx = st.selectbox(
+                        "Select Scan",
+                        options=range(len(nifti_scans)),
+                        format_func=lambda i: scan_labels[i],
+                        key="viewer_scan_select"
+                    )
+                    
+                    if selected_scan_idx is not None:
+                        selected_scan = nifti_scans[selected_scan_idx]
+                        
+                        # Display scan info
+                        st.markdown("---")
+                        st.markdown("**Selected Scan**")
+                        st.caption(f"File: {Path(selected_scan['file_path']).name}")
+                        st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
+                        st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
+                        
+                        # Load button
+                        if st.button("Load in Viewer →", use_container_width=True, type="primary"):
+                            st.session_state.selected_scan = selected_scan
+                            st.session_state.viewer_file_loaded = True
+                            st.rerun()
+    
+    with col_viewer:
+        st.markdown("### Viewer")
+        
+        # Check if scan is loaded
+        if 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded:
+            selected_scan = st.session_state.get('selected_scan')
+            
+            if not selected_scan:
+                st.info("Select a scan from the file browser and click 'Load in Viewer'")
+                return
+            
+            # Check if file is downloaded
+            file_path = selected_scan.get('file_path', '')
+            download_status = selected_scan.get('download_status', '')
+            
+            if download_status != 'completed':
+                st.warning("This scan is not downloaded yet. Download it first from Download Manager.")
+                st.caption(f"File: {Path(file_path).name}")
+                return
+            
+            # Check if file exists locally
+            if not os.path.exists(file_path):
+                st.error(f"File not found: {file_path}")
+                st.caption("The file may have been moved or deleted.")
+                return
+            
+            # Display scan metadata
+            st.markdown(f"**Subject:** {selected_scan.get('subject_id', 'N/A')}")
+            st.markdown(f"**Session:** {selected_scan.get('session_id', 'N/A')}")
+            st.markdown(f"**Modality:** {selected_scan.get('modality', 'N/A')} - {selected_scan.get('suffix', 'N/A')}")
+            st.caption(f"File: {Path(file_path).name}")
+            
+            st.markdown("---")
+            
+            # Load and display NIfTI using plotly
+            try:
+                import nibabel as nib
+                import plotly.graph_objects as go
+                import numpy as np
+                
+                with st.spinner("Loading NIfTI image..."):
+                    nifti_img = nib.load(file_path)
+                    img_data = nifti_img.get_fdata()
+                    
+                    # Display image info
+                    st.success(f"Loaded: {Path(file_path).name}")
+                    
+                    col_info1, col_info2, col_info3 = st.columns(3)
+                    with col_info1:
+                        st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
+                    with col_info2:
+                        voxel_sizes = nifti_img.header.get_zooms()
+                        st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
+                    with col_info3:
+                        st.metric("Data Type", str(img_data.dtype))
+                    
+                    st.markdown("---")
+                    
+                    # View selector tabs
+                    tab_axial, tab_sagittal, tab_coronal = st.tabs(["Axial (Z)", "Sagittal (X)", "Coronal (Y)"])
+                    
+                    with tab_axial:
+                        st.markdown("**Axial View** - Looking down from the top")
+                        slice_z = st.slider("Slice", 0, img_data.shape[2]-1, img_data.shape[2]//2, key="axial_slice")
+                        
+                        # Create plotly figure
+                        fig = go.Figure(data=go.Heatmap(
+                            z=np.rot90(img_data[:, :, slice_z]),
+                            colorscale='gray',
+                            showscale=True
+                        ))
+                        fig.update_layout(
+                            title=f"Axial Slice {slice_z}/{img_data.shape[2]-1}",
+                            xaxis_title="X",
+                            yaxis_title="Y",
+                            height=500
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with tab_sagittal:
+                        st.markdown("**Sagittal View** - Looking from the side")
+                        slice_x = st.slider("Slice", 0, img_data.shape[0]-1, img_data.shape[0]//2, key="sagittal_slice")
+                        
+                        fig = go.Figure(data=go.Heatmap(
+                            z=np.rot90(img_data[slice_x, :, :]),
+                            colorscale='gray',
+                            showscale=True
+                        ))
+                        fig.update_layout(
+                            title=f"Sagittal Slice {slice_x}/{img_data.shape[0]-1}",
+                            xaxis_title="Y",
+                            yaxis_title="Z",
+                            height=500
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with tab_coronal:
+                        st.markdown("**Coronal View** - Looking from the front")
+                        slice_y = st.slider("Slice", 0, img_data.shape[1]-1, img_data.shape[1]//2, key="coronal_slice")
+                        
+                        fig = go.Figure(data=go.Heatmap(
+                            z=np.rot90(img_data[:, slice_y, :]),
+                            colorscale='gray',
+                            showscale=True
+                        ))
+                        fig.update_layout(
+                            title=f"Coronal Slice {slice_y}/{img_data.shape[1]-1}",
+                            xaxis_title="X",
+                            yaxis_title="Z",
+                            height=500
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+            except Exception as e:
+                st.error(f"Failed to load NIfTI image: {str(e)}")
+                st.caption("Make sure the file is a valid NIfTI format (.nii or .nii.gz)")
+        else:
+            st.info("Select a scan from the file browser on the left and click 'Load in Viewer'")
+            st.markdown("---")
+            st.markdown("**Instructions:**")
+            st.markdown("1. Select a dataset from the dropdown")
+            st.markdown("2. Choose a subject")
+            st.markdown("3. Pick a session")
+            st.markdown("4. Select a NIfTI scan to visualize")
+            st.markdown("5. Click 'Load in Viewer' to display")
+
+
+def page_transfer():
     
     if not st.session_state.db:
         st.warning("Please complete setup first")
@@ -5546,9 +5793,7 @@ def main():
     elif page == 'export':
         page_export()
     elif page == 'viewer':
-        # Viewer page accessed via subject detail page
-        st.info("Access viewer from Subject Detail page")
-        page_home()
+        page_viewer()
     else:
         page_home()
 
