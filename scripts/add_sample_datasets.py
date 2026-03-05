@@ -15,8 +15,8 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
     Add sample OpenNeuro datasets to the database.
     
     Sample Datasets:
-    1. ds005115 - Minimal MRI dataset (1 subject) for basic testing
-    2. ds000228 - Test-retest fMRI dataset (small, well-structured)
+    1. ds005115 - Dense-sampling study (1 subject, 40 sessions)
+    2. ds000114 - Test-retest fMRI (10 subjects, motor/language tasks)
     
     Args:
         db_path: Path to the database file (default: data/tracktbi.db)
@@ -36,7 +36,7 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
         # Enable foreign keys
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        # Sample datasets configuration
+        # Sample datasets configuration (verified real datasets)
         sample_datasets = [
             {
                 'name': 'OpenNeuro Sample - Minimal MRI (ds005115)',
@@ -45,16 +45,16 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
                 'root_path': None,
                 'server_url': 'https://openneuro.org',
                 'status': 'active',
-                'description': 'Very small dataset (1 subject) - ideal for quick testing'
+                'description': '1 subject, 40 sessions - Deep phenotyping study (28andHe)'
             },
             {
-                'name': 'OpenNeuro Sample - Test-Retest fMRI (ds000228)',
+                'name': 'OpenNeuro Sample - Motor/Language fMRI (ds000114)',
                 'platform': 'openneuro',
-                'dataset_id_external': 'ds000228',
+                'dataset_id_external': 'ds000114',
                 'root_path': None,
                 'server_url': 'https://openneuro.org',
                 'status': 'active',
-                'description': 'Small test-retest dataset - good for workflow testing'
+                'description': '10 subjects, test-retest - Motor, language, spatial attention tasks'
             }
         ]
         
@@ -200,7 +200,7 @@ def remove_sample_datasets(db_path='data/tracktbi.db'):
         # Enable foreign keys to cascade deletes
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        sample_ids = ['ds005115', 'ds000228']
+        sample_ids = ['ds005115', 'ds000114']
         
         for dataset_id in sample_ids:
             cursor.execute(

@@ -57,18 +57,18 @@ BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and lea
 ### Available Sample Datasets
 
 **1. OpenNeuro Sample - Minimal MRI (ds005115)**
-- **Size:** Very small (1 subject)
-- **Use Case:** Quick testing and feature exploration
-- **Content:** Basic T1w structural MRI
+- **Size:** 1 subject with 40 sessions over 30 days
+- **Use Case:** Dense-sampling deep phenotyping study (28andHe)
+- **Content:** T1w structural MRI, resting-state fMRI, physiological data
 - **URL:** https://openneuro.org/datasets/ds005115
-- **Best For:** First-time users, basic workflow testing
+- **Best For:** First-time users, multi-session workflows, time-series analysis
 
-**2. OpenNeuro Sample - Test-Retest fMRI (ds000228)**
-- **Size:** Small (~10 subjects with multiple sessions)
-- **Use Case:** Multi-session workflow testing
-- **Content:** Test-retest fMRI data
-- **URL:** https://openneuro.org/datasets/ds000228
-- **Best For:** QC workflows, session comparisons, download testing
+**2. OpenNeuro Sample - Motor/Language fMRI (ds000114)**
+- **Size:** 10 subjects, test-retest (2 sessions per subject, 2-3 days apart)
+- **Use Case:** Task fMRI validation for pre-surgical planning
+- **Content:** Motor, language, and spatial attention tasks + DTI + T1w
+- **URL:** https://openneuro.org/datasets/ds000114
+- **Best For:** QC workflows, test-retest reliability, task fMRI testing
 
 ### Using Sample Datasets (No Setup Required)
 

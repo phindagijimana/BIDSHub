@@ -137,8 +137,8 @@ python scripts/add_sample_datasets.py add
 ```
 
 Sample datasets available:
-- **ds005115** - Minimal MRI (1 subject) for quick feature testing
-- **ds000228** - Test-retest fMRI for workflow testing
+- **ds005115** - Deep phenotyping (1 subject, 40 sessions) for multi-session testing
+- **ds000114** - Test-retest fMRI (10 subjects) for task-based workflows
 
 **No credentials needed!** Just navigate to "Manage Datasets", select a sample dataset, and click "Sync" to start exploring.
 
