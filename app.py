@@ -4195,7 +4195,7 @@ def display_session_scans(session_id, scans, subject_id, platform=None, dataset_
             
             # Display scan with QC controls
             with st.container():
-                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 2, 1])
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 2, 1, 1])
                 
                 with col1:
                     st.markdown(f"**{scan.get('suffix', 'unknown')}**")
@@ -4251,11 +4251,18 @@ def display_session_scans(session_id, scans, subject_id, platform=None, dataset_
                                 st.rerun()
                 
                 with col5:
-                    # View button
-                    if st.button("[View]", key=f"view_{scan_id}_{idx}", help="View in Viewer"):
+                    # View button for quick access to viewer
+                    if st.button("[View]", key=f"view_{scan_id}_{idx}", help="Open in Viewer", use_container_width=True):
                         st.session_state.selected_scan = scan
+                        st.session_state.viewer_file_loaded = True
                         st.session_state.current_page = 'viewer'
                         st.rerun()
+                
+                with col6:
+                    # Download action
+                    if is_stub and platform and dataset_remote_id:
+                        if st.button("[DL]", key=f"dl_{scan_id}_{idx}", help="Download", use_container_width=True):
+                            st.info("Use Download Manager for batch downloads")
                 
                 # Show QC notes if any
                 if current_notes:
