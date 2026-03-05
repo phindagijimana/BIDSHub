@@ -4823,6 +4823,11 @@ def page_viewer():
     
     st.markdown("Browse and visualize any NIfTI image")
     
+    # Initialize agent factory for DANDI downloads
+    if 'agent_factory' not in st.session_state:
+        from src.agent_factory import AgentFactory
+        st.session_state.agent_factory = AgentFactory(st.session_state.db)
+    
     # Two-column layout: File browser (left) | Viewer (right)
     col_browser, col_viewer = st.columns([1, 2], gap="large")
     
