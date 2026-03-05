@@ -52,9 +52,11 @@ When you first launch BIDSHub, you'll see:
 
 ## Sample Datasets for Testing
 
-BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and learning the platform without needing to set up credentials or connect to external platforms.
+BIDSHub includes 4 pre-configured sample datasets (2 OpenNeuro + 2 DANDI) perfect for testing and learning the platform without needing to set up credentials or connect to external platforms.
 
 ### Available Sample Datasets
+
+**OpenNeuro Datasets:**
 
 **1. OpenNeuro Sample - Minimal MRI (ds005115)**
 - **Size:** 1 subject with 40 sessions over 30 days
@@ -62,6 +64,7 @@ BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and lea
 - **Content:** T1w structural MRI, resting-state fMRI, physiological data
 - **URL:** https://openneuro.org/datasets/ds005115
 - **Best For:** First-time users, multi-session workflows, time-series analysis
+- **Note:** OpenNeuro datasets require download before viewing in NIfTI viewer
 
 **2. OpenNeuro Sample - Motor/Language fMRI (ds000114)**
 - **Size:** 10 subjects, test-retest (2 sessions per subject, 2-3 days apart)
@@ -69,6 +72,25 @@ BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and lea
 - **Content:** Motor, language, and spatial attention tasks + DTI + T1w
 - **URL:** https://openneuro.org/datasets/ds000114
 - **Best For:** QC workflows, test-retest reliability, task fMRI testing
+- **Note:** OpenNeuro datasets require download before viewing in NIfTI viewer
+
+**DANDI Datasets:**
+
+**3. DANDI Sample - Brain Cell Census (000026)**
+- **Size:** Human brain cell census for Brodmann Areas 44/45
+- **Use Case:** MRI structural data with cytoarchitectural boundaries
+- **Content:** Magnetic resonance imaging (MRI) structural scans
+- **URL:** https://dandiarchive.org/dandiset/000026
+- **Best For:** Testing DANDI integration, structural MRI workflows
+- **Advantage:** Supports direct file-level access and streaming without full download
+
+**4. DANDI Sample - 7T MR Structural (000058)**
+- **Size:** 7T MRI structural images with quantitative maps
+- **Use Case:** Ultra-high field MRI structural imaging
+- **Content:** 7T MR structural images with B0 and B1+ parameter maps
+- **URL:** https://dandiarchive.org/dandiset/000058
+- **Best For:** Testing high-resolution MRI, quantitative imaging workflows
+- **Advantage:** Supports direct file-level access and streaming without full download
 
 ### Using Sample Datasets (No Setup Required)
 
@@ -93,6 +115,20 @@ BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and lea
 - All OpenNeuro data is publicly accessible
 - Perfect for learning before connecting your own datasets
 - Test all BIDSHub features without touching real data
+
+### Key Differences: OpenNeuro vs DANDI
+
+**OpenNeuro:**
+- All datasets are public and BIDS-compliant
+- GraphQL API returns only top-level directory structure
+- Individual scans require downloading dataset first (no file-level streaming)
+- Best workflow: Download subjects, then use "From File System" viewer mode
+
+**DANDI:**
+- Mixed formats (NWB + BIDS), need to filter for BIDS MRI datasets
+- REST API provides full file listings and direct download URLs
+- Supports file-level access and streaming (no full dataset download needed)
+- Best workflow: Sync metadata, then stream individual scans directly in viewer
 
 ### Managing Sample Datasets
 

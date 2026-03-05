@@ -1,8 +1,12 @@
 """
-Add sample OpenNeuro datasets to BIDSHub for testing.
+Add sample datasets (OpenNeuro and DANDI) to BIDSHub for testing.
 
-This script adds 2 pre-configured OpenNeuro datasets that can be used for testing
-various BIDSHub features including browsing, filtering, downloading, and QC.
+This script adds 4 pre-configured sample datasets:
+- 2 OpenNeuro datasets
+- 2 DANDI datasets
+
+These can be used for testing various BIDSHub features including browsing, 
+filtering, downloading, and QC.
 """
 
 import sqlite3
@@ -10,13 +14,18 @@ import os
 from pathlib import Path
 
 
-def add_sample_datasets(db_path='data/tracktbi.db'):
+def add_sample_datasets(db_path='data/bidshub.db'):
     """
-    Add sample OpenNeuro datasets to the database.
+    Add sample datasets from OpenNeuro and DANDI to the database.
     
     Sample Datasets:
+    OpenNeuro:
     1. ds005115 - Dense-sampling study (1 subject, 40 sessions)
     2. ds000114 - Test-retest fMRI (10 subjects, motor/language tasks)
+    
+    DANDI:
+    3. 000026 - Human brain cell census for BA 44/45 (MRI structural)
+    4. 000058 - MITU01 Dataset (7T MR structural with parameter maps)
     
     Args:
         db_path: Path to the database file (default: data/tracktbi.db)
@@ -38,6 +47,7 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
         
         # Sample datasets configuration (verified real datasets)
         sample_datasets = [
+            # OpenNeuro datasets
             {
                 'name': 'OpenNeuro Sample - Minimal MRI (ds005115)',
                 'platform': 'openneuro',
@@ -55,6 +65,25 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
                 'server_url': 'https://openneuro.org',
                 'status': 'active',
                 'description': '10 subjects, test-retest - Motor, language, spatial attention tasks'
+            },
+            # DANDI datasets
+            {
+                'name': 'DANDI Sample - Brain Cell Census (000026)',
+                'platform': 'dandi',
+                'dataset_id_external': '000026',
+                'root_path': None,
+                'server_url': 'https://dandiarchive.org',
+                'status': 'active',
+                'description': 'Human brain cell census for BA 44/45 - MRI structural data'
+            },
+            {
+                'name': 'DANDI Sample - 7T MR Structural (000058)',
+                'platform': 'dandi',
+                'dataset_id_external': '000058',
+                'root_path': None,
+                'server_url': 'https://dandiarchive.org',
+                'status': 'active',
+                'description': '7T MR structural images with B0/B1+ parameter maps'
             }
         ]
         
@@ -62,7 +91,7 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
         skipped_count = 0
         
         print("=" * 60)
-        print("BIDSHub - Adding Sample OpenNeuro Datasets")
+        print("BIDSHub - Adding Sample Datasets (OpenNeuro & DANDI)")
         print("=" * 60)
         
         for dataset in sample_datasets:
@@ -102,7 +131,14 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
             print(f"     Dataset ID: {dataset['dataset_id_external']}")
             print(f"     Database ID: {dataset_id}")
             print(f"     Description: {dataset['description']}")
-            print(f"     URL: {dataset['server_url']}/datasets/{dataset['dataset_id_external']}")
+            # Format URL based on platform
+            if dataset['platform'] == 'openneuro':
+                url = f"{dataset['server_url']}/datasets/{dataset['dataset_id_external']}"
+            elif dataset['platform'] == 'dandi':
+                url = f"{dataset['server_url']}/dandiset/{dataset['dataset_id_external']}"
+            else:
+                url = dataset['server_url']
+            print(f"     URL: {url}")
             
             added_count += 1
         
@@ -131,9 +167,9 @@ def add_sample_datasets(db_path='data/tracktbi.db'):
             conn.close()
 
 
-def list_openneuro_datasets(db_path='data/tracktbi.db'):
+def list_sample_datasets(db_path='data/bidshub.db'):
     """
-    List all OpenNeuro datasets in the database.
+    List all sample datasets in the database.
     
     Args:
         db_path: Path to the database file
@@ -147,30 +183,39 @@ def list_openneuro_datasets(db_path='data/tracktbi.db'):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, name, dataset_id_external, status, created_date, last_sync_date
+            SELECT id, name, dataset_id_external, platform, status, created_date, last_sync_date
             FROM datasets
-            WHERE platform = 'openneuro'
-            ORDER BY created_date DESC
+            WHERE platform IN ('openneuro', 'dandi')
+            ORDER BY platform, created_date DESC
         """)
         
         datasets = cursor.fetchall()
         
         if not datasets:
-            print("No OpenNeuro datasets found in database.")
+            print("No sample datasets found in database.")
             return
         
         print("\n" + "=" * 80)
-        print("OpenNeuro Datasets in BIDSHub")
+        print("Sample Datasets in BIDSHub (OpenNeuro & DANDI)")
         print("=" * 80)
         
         for ds in datasets:
-            db_id, name, ext_id, status, created, synced = ds
+            db_id, name, ext_id, platform, status, created, synced = ds
             print(f"\n[{db_id}] {name}")
+            print(f"    Platform: {platform}")
             print(f"    Dataset ID: {ext_id}")
             print(f"    Status: {status}")
             print(f"    Created: {created}")
             print(f"    Last Sync: {synced or 'Never'}")
-            print(f"    URL: https://openneuro.org/datasets/{ext_id}")
+            
+            # Format URL based on platform
+            if platform == 'openneuro':
+                url = f"https://openneuro.org/datasets/{ext_id}"
+            elif platform == 'dandi':
+                url = f"https://dandiarchive.org/dandiset/{ext_id}"
+            else:
+                url = 'N/A'
+            print(f"    URL: {url}")
         
         print("\n" + "=" * 80)
         
@@ -182,9 +227,9 @@ def list_openneuro_datasets(db_path='data/tracktbi.db'):
             conn.close()
 
 
-def remove_sample_datasets(db_path='data/tracktbi.db'):
+def remove_sample_datasets(db_path='data/bidshub.db'):
     """
-    Remove sample OpenNeuro datasets from the database.
+    Remove sample datasets (OpenNeuro and DANDI) from the database.
     
     Args:
         db_path: Path to the database file
@@ -200,7 +245,7 @@ def remove_sample_datasets(db_path='data/tracktbi.db'):
         # Enable foreign keys to cascade deletes
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        sample_ids = ['ds005115', 'ds000114']
+        sample_ids = ['ds005115', 'ds000114', '000026', '000058']
         
         for dataset_id in sample_ids:
             cursor.execute(
@@ -227,7 +272,7 @@ def remove_sample_datasets(db_path='data/tracktbi.db'):
 if __name__ == "__main__":
     import sys
     
-    db_path = 'data/tracktbi.db'
+    db_path = 'data/bidshub.db'
     
     # Parse command line arguments
     if len(sys.argv) > 1:
@@ -236,9 +281,9 @@ if __name__ == "__main__":
         if command == 'add':
             add_sample_datasets(db_path)
         elif command == 'list':
-            list_openneuro_datasets(db_path)
+            list_sample_datasets(db_path)
         elif command == 'remove':
-            response = input("Remove sample OpenNeuro datasets? (y/N): ")
+            response = input("Remove all sample datasets (OpenNeuro + DANDI)? (y/N): ")
             if response.lower() == 'y':
                 remove_sample_datasets(db_path)
             else:

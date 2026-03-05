@@ -130,17 +130,19 @@ open http://localhost:8501
 
 **Testing with Sample Datasets** (No setup required):
 
-BIDSHub includes 2 pre-configured OpenNeuro datasets for testing:
+BIDSHub includes 4 pre-configured sample datasets for testing:
 ```bash
 # Add sample datasets to database
 python scripts/add_sample_datasets.py add
 ```
 
 Sample datasets available:
-- **ds005115** - Deep phenotyping (1 subject, 40 sessions) for multi-session testing
-- **ds000114** - Test-retest fMRI (10 subjects) for task-based workflows
+- **OpenNeuro ds005115** - Deep phenotyping (1 subject, 40 sessions) for multi-session testing
+- **OpenNeuro ds000114** - Test-retest fMRI (10 subjects) for task-based workflows
+- **DANDI 000026** - Human brain cell census for BA 44/45 (MRI structural data)
+- **DANDI 000058** - 7T MR structural images with B0/B1+ parameter maps
 
-**No credentials needed!** Just navigate to "Manage Datasets", select a sample dataset, and click "Sync" to start exploring.
+**No credentials needed!** Just navigate to "Manage Datasets", select a sample dataset, and click "Sync" to start exploring. DANDI datasets support direct file-level access without downloading entire datasets.
 
 **To add your own dataset**:
 

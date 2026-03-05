@@ -267,13 +267,13 @@ class DANDIAgent(BasePlatformAgent):
     
     def get_subjects_with_metadata(self, dandiset_id: str) -> List[Dict]:
         """
-        Fetch subject list with metadata from DANDI dandiset.
+        Fetch subject list with metadata and scans from DANDI dandiset.
         
         Args:
             dandiset_id: Dandiset identifier (e.g., '000001')
             
         Returns:
-            list: List of dicts with subject info
+            list: List of dicts with subject info and scans
         """
         try:
             if not self.client:
@@ -282,16 +282,57 @@ class DANDIAgent(BasePlatformAgent):
             
             structure = self.get_dataset_structure(dandiset_id)
             subjects_list = structure.get('subjects', [])
+            all_files = structure.get('files', [])
             
             if not subjects_list:
                 logger.warning(f"No subjects found in dandiset {dandiset_id}")
                 return []
             
-            # For DANDI, metadata is often in NWB files or participants.tsv
-            # Basic subject list with minimal metadata
+            # Build a map of subject -> scans from all files
+            subject_scans_map = {}
+            for file_info in all_files:
+                file_path = file_info['path']
+                
+                # Extract subject ID from path (BIDS: /sub-XX/...)
+                if '/sub-' in file_path and file_path.endswith(('.nii', '.nii.gz')):
+                    try:
+                        subject_part = file_path.split('/sub-')[1]
+                        subject_id = f"sub-{subject_part.split('/')[0]}"
+                        
+                        # Extract session if present
+                        session_id = 'ses-default'
+                        if '/ses-' in file_path:
+                            session_part = file_path.split('/ses-')[1]
+                            session_id = f"ses-{session_part.split('/')[0]}"
+                        
+                        # Extract scan info
+                        filename = Path(file_path).name
+                        
+                        scan_info = {
+                            'scan_type': self._infer_scan_type(filename),
+                            'file_path': file_path,
+                            'asset_id': file_info['asset_id'],
+                            'size_bytes': file_info['size_bytes'],
+                            'session_id': session_id,
+                            'modality': self._infer_modality(file_path)
+                        }
+                        
+                        if subject_id not in subject_scans_map:
+                            subject_scans_map[subject_id] = []
+                        subject_scans_map[subject_id].append(scan_info)
+                    except:
+                        pass
+            
+            # Build subject list with scans
             result = []
             for subject_info in subjects_list:
                 subject_id = subject_info['subject_id']
+                scans = subject_scans_map.get(subject_id, [])
+                
+                # Extract unique sessions from scans
+                sessions = list(set(scan['session_id'] for scan in scans))
+                if not sessions:
+                    sessions = ['ses-default']
                 
                 result.append({
                     'subject_id': subject_id,
@@ -301,7 +342,8 @@ class DANDIAgent(BasePlatformAgent):
                     'participant_group': None,
                     'handedness': None,
                     'site': None,
-                    'sessions': subject_info.get('sessions', []),
+                    'sessions': sessions,
+                    'scans': scans,
                     'has_anat': structure.get('has_bids', False),
                     'has_func': False,
                     'has_dwi': False,
@@ -314,6 +356,36 @@ class DANDIAgent(BasePlatformAgent):
         except Exception as e:
             logger.error(f"Error fetching subjects from {dandiset_id}: {e}")
             return []
+    
+    def _infer_scan_type(self, filename: str) -> str:
+        """Infer scan type from BIDS filename."""
+        filename_lower = filename.lower()
+        
+        if 't1w' in filename_lower:
+            return 'T1w'
+        elif 't2w' in filename_lower:
+            return 'T2w'
+        elif 'flair' in filename_lower:
+            return 'FLAIR'
+        elif 'bold' in filename_lower or 'task' in filename_lower:
+            return 'BOLD'
+        elif 'dwi' in filename_lower:
+            return 'DWI'
+        else:
+            return 'OTHER'
+    
+    def _infer_modality(self, file_path: str) -> str:
+        """Infer modality from BIDS file path."""
+        if '/anat/' in file_path:
+            return 'anat'
+        elif '/func/' in file_path:
+            return 'func'
+        elif '/dwi/' in file_path:
+            return 'dwi'
+        elif '/fmap/' in file_path:
+            return 'fmap'
+        else:
+            return 'other'
     
     def get_bids_compliance(self) -> str:
         """DANDI has partial BIDS support (some dandisets are BIDS-compliant)."""
