@@ -50,6 +50,67 @@ When you first launch BIDSHub, you'll see:
 
 ---
 
+## Sample Datasets for Testing
+
+BIDSHub includes 2 pre-configured OpenNeuro datasets perfect for testing and learning the platform without needing to set up credentials or connect to external platforms.
+
+### Available Sample Datasets
+
+**1. OpenNeuro Sample - Minimal MRI (ds005115)**
+- **Size:** Very small (1 subject)
+- **Use Case:** Quick testing and feature exploration
+- **Content:** Basic T1w structural MRI
+- **URL:** https://openneuro.org/datasets/ds005115
+- **Best For:** First-time users, basic workflow testing
+
+**2. OpenNeuro Sample - Test-Retest fMRI (ds000228)**
+- **Size:** Small (~10 subjects with multiple sessions)
+- **Use Case:** Multi-session workflow testing
+- **Content:** Test-retest fMRI data
+- **URL:** https://openneuro.org/datasets/ds000228
+- **Best For:** QC workflows, session comparisons, download testing
+
+### Using Sample Datasets (No Setup Required)
+
+1. **Navigate to Manage Datasets**
+   - Click "Manage Datasets" from the sidebar
+   - You'll see the sample datasets already listed with status "active"
+
+2. **Sync Dataset Metadata**
+   - Select a sample dataset (e.g., "OpenNeuro Sample - Minimal MRI")
+   - Click the "Sync" button
+   - Wait for metadata indexing to complete (displays subject and scan counts)
+
+3. **Browse and Test Features**
+   - Go to "Browse Subjects" to view indexed subjects
+   - Use metadata filters to practice filtering
+   - View NIfTI images in the Viewer page
+   - Practice QC workflows on sample scans
+   - Test downloading selected scans
+
+**Benefits:**
+- No API keys or credentials required
+- All OpenNeuro data is publicly accessible
+- Perfect for learning before connecting your own datasets
+- Test all BIDSHub features without touching real data
+
+### Managing Sample Datasets
+
+Sample datasets can be managed using the provided script:
+
+```bash
+# Add sample datasets to database
+python scripts/add_sample_datasets.py add
+
+# List all OpenNeuro datasets in database
+python scripts/add_sample_datasets.py list
+
+# Remove sample datasets
+python scripts/add_sample_datasets.py remove
+```
+
+---
+
 ## Platform Connections
 
 ### Supported Platforms
