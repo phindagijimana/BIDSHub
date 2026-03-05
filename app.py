@@ -986,8 +986,8 @@ def render_sidebar():
         
         st.markdown("---")
         
-        # Subjects
-        subjects_label = "> Subjects" if current in ['subjects', 'subject_detail'] else "Subjects"
+        # Browse Subjects
+        subjects_label = "> Browse Subjects" if current in ['subjects', 'subject_detail'] else "Browse Subjects"
         if st.button(subjects_label, 
                     use_container_width=True,
                     key="nav_subjects"):
@@ -1013,7 +1013,7 @@ def render_sidebar():
         st.markdown("---")
         
         # Download Manager
-        downloads_label = "> Downloads" if current == 'downloads' else "Downloads"
+        downloads_label = "> Download Manager" if current == 'downloads' else "Download Manager"
         if st.button(downloads_label, 
                     use_container_width=True,
                     key="nav_downloads"):
