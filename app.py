@@ -38,7 +38,7 @@ from src.cache_manager import CacheManager
 # Page configuration
 st.set_page_config(
     page_title="BIDSHub",
-    page_icon="[B]",
+    page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -962,9 +962,8 @@ def render_sidebar():
                    unsafe_allow_html=True)
         
         if st.session_state.dataset_name:
-            platform_emoji = "[P]" if st.session_state.platform == 'pennsieve' else "[O]"
             platform_name = st.session_state.platform.title()
-            st.caption(f"**Platform:** {platform_emoji} {platform_name}")
+            st.caption(f"**Platform:** {platform_name}")
             st.caption(f"**Dataset:** {st.session_state.dataset_name}")
         
         st.markdown("---")
@@ -1068,8 +1067,8 @@ def page_setup():
             "Choose data platform",
             options=['pennsieve', 'openneuro'],
             format_func=lambda x: {
-                'pennsieve': '[P] Pennsieve (Private datasets, upload support)',
-                'openneuro': '[O] OpenNeuro (Public datasets, read-only)'
+                'pennsieve': 'Pennsieve (Private datasets, upload support)',
+                'openneuro': 'OpenNeuro (Public datasets, read-only)'
             }[x],
             key="platform_selection",
             index=0 if st.session_state.platform == 'pennsieve' else 1
@@ -1468,13 +1467,13 @@ def page_manage_datasets():
     else:
         for dataset in datasets:
             platform_emoji_map = {
-                'pennsieve': '[P]',
-                'openneuro': '[O]',
-                'dandi': '[D]',
-                'xnat': '[X]',
-                'hpc': '[H]',
-                'remote_server': '[R]',
-                'local': '[L]'
+                'pennsieve': '',
+                'openneuro': '',
+                'dandi': '',
+                'xnat': '',
+                'hpc': '',
+                'remote_server': '',
+                'local': ''
             }
             
             with st.expander(f"{platform_emoji_map.get(dataset['platform'], '[Data]')} {dataset['name']}", 
@@ -1683,12 +1682,12 @@ def page_manage_datasets():
             "Platform",
             options=['pennsieve', 'openneuro', 'dandi', 'xnat', 'hpc', 'remote_server'],
             format_func=lambda x: {
-                'pennsieve': '[P] Pennsieve',
-                'openneuro': '[O] OpenNeuro',
-                'dandi': '[D] DANDI',
-                'xnat': '[X] XNAT',
-                'hpc': '[H] HPC Cluster',
-                'remote_server': '[R] Remote Server (SSH)'
+                'pennsieve': 'Pennsieve',
+                'openneuro': 'OpenNeuro',
+                'dandi': 'DANDI',
+                'xnat': 'XNAT',
+                'hpc': 'HPC Cluster',
+                'remote_server': 'Remote Server (SSH)'
             }.get(x, x.title()),
             key="new_dataset_platform"
         )
@@ -2383,12 +2382,12 @@ def page_subjects():
                     unsafe_allow_html=True)
         
         platform_emojis = {
-            'pennsieve': '[P]',
-            'openneuro': '[O]',
-            'dandi': '[D]',
-            'xnat': '[X]',
-            'hpc': '[H]',
-            'remote_server': '[R]'
+            'pennsieve': '',
+            'openneuro': '',
+            'dandi': '',
+            'xnat': '',
+            'hpc': '',
+            'remote_server': ''
         }
         
         selected_dataset_ids = st.multiselect(
@@ -5287,13 +5286,13 @@ def page_transfer():
         return
     
     platform_emojis = {
-        'local': '[L]',
-        'pennsieve': '[P]',
-        'openneuro': '[O]',
-        'dandi': '[D]',
-        'xnat': '[X]',
-        'hpc': '[H]',
-        'remote_server': '[R]'
+        'local': '',
+        'pennsieve': '',
+        'openneuro': '',
+        'dandi': '',
+        'xnat': '',
+        'hpc': '',
+        'remote_server': ''
     }
     
     # Initialize transfer session state
