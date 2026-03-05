@@ -4891,7 +4891,7 @@ def page_transfer():
                     
                     # Checkbox for each subject with scan count
                     if st.checkbox(
-                        f"[Folder] {subj['subject_id']} ({scan_count} scans)",
+                        f"{subj['subject_id']} ({scan_count} scans)",
                         key=f"src_{subj['subject_id']}",
                         value=False
                     ):
@@ -4960,7 +4960,7 @@ def page_transfer():
                     for subj in dest_subjects[:20]:
                         sessions = st.session_state.db.get_subject_sessions(subj['subject_id'], dest_dataset_id) or []
                         scan_count = sum([s.get('scan_count', 0) for s in sessions])
-                        st.caption(f"[Folder] {subj['subject_id']} ({scan_count} scans)")
+                        st.caption(f"{subj['subject_id']} ({scan_count} scans)")
                     
                     if len(dest_subjects) > 20:
                         st.caption(f"... and {len(dest_subjects) - 20} more")
