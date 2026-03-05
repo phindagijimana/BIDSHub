@@ -4582,7 +4582,7 @@ def page_export():
 
 
 def page_transfer():
-    """Data Transfer page for bidirectional platform-to-platform transfers (v3.1.1+)."""
+    """Data Transfer page with WinSCP-style dual-pane interface (v3.1.1+)."""
     render_page_header('transfer', show_back_to_dashboard=True)
     render_breadcrumb('transfer')
     st.markdown('<h1 class="main-header">Data Transfer</h1>', 
@@ -4591,8 +4591,6 @@ def page_transfer():
     if not st.session_state.db:
         st.warning("Please complete setup first")
         return
-    
-    st.info("Transfer BIDS data between platforms - supports bidirectional transfers between Local, Pennsieve, XNAT, HPC, and Remote Server")
     
     # Initialize agent factory
     if 'agent_factory' not in st.session_state:
@@ -4606,6 +4604,9 @@ def page_transfer():
     
     if not all_datasets or len(all_datasets) < 1:
         st.warning("No datasets configured. Add datasets in Manage Datasets page.")
+        if st.button("Go to Manage Datasets"):
+            st.session_state.current_page = 'manage_datasets'
+            st.rerun()
         return
     
     platform_emojis = {
@@ -4618,14 +4619,37 @@ def page_transfer():
         'remote_server': '[R]'
     }
     
-    # Source and Destination Selection
-    st.markdown('<h2 class="section-header">[Sync] Transfer Configuration</h2>', 
-                unsafe_allow_html=True)
+    # Initialize transfer session state
+    if 'transfer_selected_left' not in st.session_state:
+        st.session_state.transfer_selected_left = []
+    if 'transfer_selected_right' not in st.session_state:
+        st.session_state.transfer_selected_right = []
     
-    col1, col2 = st.columns(2)
+    # Connection Settings (Collapsible)
+    with st.expander("Connection Settings", expanded=False):
+        st.markdown("### Platform Connections")
+        st.caption("Configure connection details for platforms if needed")
+        
+        conn_col1, conn_col2 = st.columns(2)
+        
+        with conn_col1:
+            st.markdown("**Source Connection**")
+            st.caption("Connection details loaded from dataset configuration")
+            st.info("Edit connections in Manage Datasets page")
+        
+        with conn_col2:
+            st.markdown("**Destination Connection**")
+            st.caption("Connection details loaded from dataset configuration")
+            st.info("Edit connections in Manage Datasets page")
     
+    st.markdown("---")
+    
+    # WinSCP-Style Dual Pane Interface
+    st.markdown('<h2 class="section-header">File Browser</h2>', unsafe_allow_html=True)
+    
+    # LEFT PANE: Source Browser
     with col1:
-        st.markdown("###  Source")
+        st.markdown("### Source Platform")
         
         source_dataset_options = {
             f"{platform_emojis.get(ds['platform'], '[Data]')} {ds['name']}": ds['id']
@@ -4633,45 +4657,67 @@ def page_transfer():
         }
         
         selected_source_display = st.selectbox(
-            "Source Platform/Dataset",
+            "Choose source",
             options=list(source_dataset_options.keys()),
             key='transfer_source_dataset',
-            help="Select where to transfer data FROM"
+            label_visibility="collapsed"
         )
         
         source_dataset_id = source_dataset_options[selected_source_display]
         source_dataset = st.session_state.db.get_dataset(source_dataset_id)
         
-        st.caption(f"Platform: **{source_dataset['platform'].upper()}**")
+        # Platform info badge
+        st.markdown(f"**{source_dataset['platform'].upper()}** | {len(st.session_state.db.get_subjects_by_dataset(source_dataset_id))} subjects")
         
-        # Get subjects from source
+        # Source file browser with tree-like view
         source_subjects = st.session_state.db.get_subjects_by_dataset(source_dataset_id)
         
         if source_subjects:
-            st.caption(f"Available subjects: {len(source_subjects)}")
-            
-            # Multi-select subjects
-            subject_options = {
-                f"{subj['subject_id']}": subj['subject_id']
-                for subj in source_subjects
-            }
-            
-            selected_subjects = st.multiselect(
-                "Select subjects to transfer",
-                options=list(subject_options.keys()),
-                default=[],
-                key='transfer_subjects',
-                help="Choose which subjects to transfer"
-            )
+            # Create scrollable file list container
+            with st.container():
+                st.markdown("**📁 Subjects** (Select to transfer →)")
+                
+                # Display subjects in expandable format
+                selected_subjects = []
+                for subj in source_subjects[:20]:  # Limit to 20 for performance
+                    sessions = st.session_state.db.get_subject_sessions(subj['subject_id'], source_dataset_id) or []
+                    scan_count = sum([s.get('scan_count', 0) for s in sessions])
+                    
+                    # Checkbox for each subject with scan count
+                    if st.checkbox(
+                        f"📂 {subj['subject_id']} ({scan_count} scans)",
+                        key=f"src_{subj['subject_id']}",
+                        value=False
+                    ):
+                        selected_subjects.append(subj['subject_id'])
+                
+                if len(source_subjects) > 20:
+                    st.caption(f"Showing 20 of {len(source_subjects)} subjects. Use filters for more.")
         else:
-            st.warning("No subjects indexed. Click 'Sync' in Manage Datasets.")
+            st.warning("No subjects indexed")
+            st.info("Click 'Sync' in Manage Datasets to index subjects")
             selected_subjects = []
     
-    with col2:
-        st.markdown("###  Destination")
+    # MIDDLE: Transfer Controls
+    with col_arrow:
+        st.markdown("<br>" * 8, unsafe_allow_html=True)
         
-        # Filter out source from destination options
-        # Also filter read-only platforms (openneuro, dandi) as destinations
+        # Transfer right button
+        if st.button("→", key="transfer_right", help="Transfer selected subjects to destination", 
+                    use_container_width=True, type="primary"):
+            st.session_state.transfer_direction = 'right'
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Transfer left button (for bidirectional)
+        if st.button("←", key="transfer_left", help="Transfer from destination to source",
+                    use_container_width=True):
+            st.session_state.transfer_direction = 'left'
+    
+    # RIGHT PANE: Destination Browser
+    with col2:
+        st.markdown("### Destination Platform")
+        
         upload_capable_platforms = ['local', 'pennsieve', 'xnat', 'hpc', 'remote_server']
         
         dest_dataset_options = {
@@ -4681,74 +4727,87 @@ def page_transfer():
         }
         
         if not dest_dataset_options:
-            st.warning("No valid destination datasets available. Add upload-capable datasets in Manage Datasets.")
+            st.warning("No valid destinations")
+            st.info("Add upload-capable datasets in Manage Datasets")
             dest_dataset = None
         else:
             selected_dest_display = st.selectbox(
-                "Destination Platform/Dataset",
+                "Choose destination",
                 options=list(dest_dataset_options.keys()),
                 key='transfer_dest_dataset',
-                help="Select where to transfer data TO"
+                label_visibility="collapsed"
             )
             
             dest_dataset_id = dest_dataset_options[selected_dest_display]
             dest_dataset = st.session_state.db.get_dataset(dest_dataset_id)
             
-            st.caption(f"Platform: **{dest_dataset['platform'].upper()}**")
+            # Platform info badge
+            st.markdown(f"**{dest_dataset['platform'].upper()}** | {len(st.session_state.db.get_subjects_by_dataset(dest_dataset_id))} subjects")
+            
+            # Destination file browser
+            dest_subjects = st.session_state.db.get_subjects_by_dataset(dest_dataset_id)
+            
+            with st.container():
+                st.markdown("**📁 Current Subjects**")
+                
+                if dest_subjects:
+                    for subj in dest_subjects[:20]:
+                        sessions = st.session_state.db.get_subject_sessions(subj['subject_id'], dest_dataset_id) or []
+                        scan_count = sum([s.get('scan_count', 0) for s in sessions])
+                        st.caption(f"📂 {subj['subject_id']} ({scan_count} scans)")
+                    
+                    if len(dest_subjects) > 20:
+                        st.caption(f"... and {len(dest_subjects) - 20} more")
+                else:
+                    st.info("No subjects yet")
     
     st.markdown("---")
     
-    # Transfer Options
-    st.markdown('<h2 class="section-header">[Settings] Transfer Options</h2>', 
-                unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        transfer_mode = st.radio(
-            "Transfer Mode",
-            options=['direct', 'cached'],
-            format_func=lambda x: 'Direct Transfer' if x == 'direct' else 'Via Local Cache',
-            key='transfer_mode',
-            help="Direct: Stream between platforms. Cached: Download to local first."
-        )
-    
-    with col2:
-        preserve_structure = st.checkbox(
-            "Preserve BIDS Structure",
-            value=True,
-            help="Maintain subject/session/modality folder structure"
-        )
-    
-    with col3:
-        verify_transfer = st.checkbox(
-            "Verify Transfer",
-            value=True,
-            help="Verify file integrity after transfer"
-        )
-    
-    st.markdown("---")
-    
-    # Transfer Preview
-    if selected_subjects and dest_dataset:
-        st.markdown('<h2 class="section-header">[List] Transfer Preview</h2>', 
-                    unsafe_allow_html=True)
-        
+    # TRANSFER OPTIONS (Collapsible)
+    with st.expander("Transfer Options", expanded=True):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Subjects to Transfer", len(selected_subjects))
+            transfer_mode = st.radio(
+                "Transfer Mode",
+                options=['direct', 'cached'],
+                format_func=lambda x: 'Direct Stream' if x == 'direct' else 'Via Local Cache',
+                key='transfer_mode',
+                help="Direct: Stream between platforms. Cached: Download locally first."
+            )
         
         with col2:
-            # Estimate total scans
+            preserve_structure = st.checkbox(
+                "Preserve BIDS Structure",
+                value=True,
+                help="Maintain subject/session/modality folder structure"
+            )
+        
+        with col3:
+            verify_transfer = st.checkbox(
+                "Verify Integrity",
+                value=True,
+                help="Verify checksums after transfer"
+            )
+    
+    # TRANSFER PREVIEW & EXECUTE
+    if selected_subjects and dest_dataset:
+        st.markdown("---")
+        st.markdown("### Transfer Summary")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Subjects", len(selected_subjects))
+        
+        with col2:
             total_scans = 0
             for subject_id in selected_subjects:
                 scans = st.session_state.db.get_scans_by_subject(subject_id, source_dataset_id)
                 total_scans += len(scans)
-            st.metric("Total Scans", total_scans)
+            st.metric("Scans", total_scans)
         
         with col3:
-            # Estimate size
             total_size = 0
             for subject_id in selected_subjects:
                 scans = st.session_state.db.get_scans_by_subject(subject_id, source_dataset_id)
@@ -4756,39 +4815,32 @@ def page_transfer():
                     total_size += scan.get('file_size', 0)
             
             from src.utils import format_file_size
-            st.metric("Estimated Size", format_file_size(total_size))
+            st.metric("Size", format_file_size(total_size))
         
-        # Transfer route display
-        st.info(f"""
-        **Transfer Route:**  
-        {platform_emojis.get(source_dataset['platform'], '[Data]')} **{source_dataset['name']}** ({source_dataset['platform'].upper()})  
-        -> {platform_emojis.get(dest_dataset['platform'], '[Data]')} **{dest_dataset['name']}** ({dest_dataset['platform'].upper()})
-        """)
+        with col4:
+            st.metric("Mode", "Direct" if transfer_mode == 'direct' else "Cached")
         
-        # Execute Transfer button
-        col1, col2 = st.columns([1, 3])
+        # Transfer route
+        st.info(f"{platform_emojis.get(source_dataset['platform'], '[Data]')} {source_dataset['name']} → {platform_emojis.get(dest_dataset['platform'], '[Data]')} {dest_dataset['name']}")
         
-        with col1:
-            if st.button("[Start] Start Transfer", type="primary", use_container_width=True, key="execute_transfer"):
-                execute_transfer(
-                    source_dataset=source_dataset,
-                    dest_dataset=dest_dataset,
-                    subject_ids=selected_subjects,
-                    transfer_mode=transfer_mode,
-                    preserve_structure=preserve_structure,
-                    verify=verify_transfer,
-                    factory=factory,
-                    database=st.session_state.db
-                )
-        
-        with col2:
-            st.caption("Transfers will preserve BIDS structure and maintain data integrity")
+        # Execute button
+        if st.button("Start Transfer", type="primary", use_container_width=True, key="execute_transfer"):
+            execute_transfer(
+                source_dataset=source_dataset,
+                dest_dataset=dest_dataset,
+                subject_ids=selected_subjects,
+                transfer_mode=transfer_mode,
+                preserve_structure=preserve_structure,
+                verify=verify_transfer,
+                factory=factory,
+                database=st.session_state.db
+            )
     
     else:
         if not selected_subjects:
-            st.info("Select subjects from source dataset to begin transfer")
+            st.info("← Select subjects from source to begin transfer")
         elif not dest_dataset:
-            st.warning("Configure a valid destination dataset")
+            st.warning("Configure a valid destination platform")
     
     st.markdown("---")
     
