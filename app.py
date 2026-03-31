@@ -33,6 +33,14 @@ from src.agent_factory import AgentFactory, create_agent_factory
 from src.bids_utils import extract_bids_path, normalize_subject_id, normalize_session_id, detect_sessions_in_path
 from src.error_messages import ErrorMessages, handle_agent_error
 from src.cache_manager import CacheManager
+from src.ui_calm import (
+    DOWNLOAD_QUEUE_PLATFORMS,
+    expected_empty,
+    quiet_queue_empty,
+    render_xnat_beta_notice,
+    toast_note,
+    toast_ok,
+)
 
 
 # Page configuration
@@ -102,6 +110,9 @@ def init_session_state():
             st.session_state.openneuro_agent = OpenNeuroAgent()
         except RuntimeError:
             st.session_state.openneuro_agent = None
+    
+    if 'ux_dismiss_xnat_beta' not in st.session_state:
+        st.session_state.ux_dismiss_xnat_beta = False
 
 
 def execute_downloads(download_manager, database):
@@ -110,7 +121,7 @@ def execute_downloads(download_manager, database):
     queue_items = download_manager.get_queue_items(status='queued')
     
     if not queue_items:
-        st.info("No items queued for download")
+        quiet_queue_empty()
         return
     
     # Group items by dataset
@@ -133,15 +144,32 @@ def execute_downloads(download_manager, database):
             dataset_groups[dataset_id] = []
         dataset_groups[dataset_id].append(item)
     
+    # Skip platforms without download execution (e.g. local) — one toast, no per-batch warnings
+    skipped_desc = []
+    supported_groups = {}
+    for dataset_id, items in dataset_groups.items():
+        dataset = datasets_cache[dataset_id]
+        plat = dataset['platform']
+        if plat not in DOWNLOAD_QUEUE_PLATFORMS:
+            skipped_desc.append(f"{plat} ({len(items)} items)")
+            continue
+        supported_groups[dataset_id] = items
+    
+    if skipped_desc:
+        toast_note("Skipped — downloads not available for: " + "; ".join(skipped_desc))
+    
+    if not supported_groups:
+        return
+    
     # Execute downloads per dataset using AgentFactory
     from src.agent_factory import AgentFactory
     factory = AgentFactory(database)
     
-    for dataset_id, items in dataset_groups.items():
+    for dataset_id, items in supported_groups.items():
         dataset = datasets_cache[dataset_id]
         platform_name = dataset['platform'].title()
         
-        st.info(f"Downloading from {platform_name}: {dataset['name']}")
+        st.caption(f"Downloading from {platform_name}: {dataset['name']}")
         
         # Use platform-specific execution based on platform type
         if dataset['platform'] == 'pennsieve':
@@ -150,8 +178,6 @@ def execute_downloads(download_manager, database):
             execute_openneuro_downloads_multi(items, dataset, database)
         elif dataset['platform'] in ['hpc', 'remote_server']:
             execute_ssh_downloads_multi(items, dataset, database, factory)
-        else:
-            st.warning(f"Download not implemented for platform: {dataset['platform']}")
 
 
 def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
@@ -1703,6 +1729,9 @@ def page_manage_datasets():
         }
         st.info(platform_descriptions.get(new_platform, "Data platform"))
     
+    if new_platform == 'xnat':
+        render_xnat_beta_notice()
+    
     # Dataset configuration form
     with st.form("add_dataset_form"):
         dataset_name = st.text_input(
@@ -2584,8 +2613,8 @@ def page_downloads():
     st.markdown('<h1 class="main-header">Download Manager</h1>', 
                 unsafe_allow_html=True)
     
-    if not st.session_state.db or not st.session_state.ps_client:
-        st.warning("Please complete setup first")
+    if not st.session_state.db:
+        st.warning("Database not initialized. Please restart the app.")
         return
     
     # Initialize agent factory and download manager (v3.1.1+: with multi-platform destination)
@@ -2596,7 +2625,7 @@ def page_downloads():
     if 'download_manager' not in st.session_state:
         from src.download_manager import DownloadManager
         st.session_state.download_manager = DownloadManager(
-            ps_client=st.session_state.ps_client,
+            ps_client=st.session_state.get('ps_client'),
             database=st.session_state.db,
             max_concurrent=3,
             agent_factory=st.session_state.agent_factory,
@@ -2995,10 +3024,10 @@ def page_downloads():
                 
                 if added_count > 0:
                     filter_msg = f" from {len(subjects)} filtered subjects" if filter_active else ""
-                    st.success(f"Added {added_count} files{filter_msg} to queue (skipped {skipped_count} already queued)")
+                    toast_ok(f"Added {added_count} file(s){filter_msg} to queue ({skipped_count} already queued)")
                     st.rerun()
                 else:
-                    st.info(f"No new files added ({skipped_count} already in queue)")
+                    st.caption(f"No new files added ({skipped_count} already in queue).")
     
     with col2:
         button_label = "Select Complete (Filtered)" if filter_active else "Select Complete Only"
@@ -3069,10 +3098,15 @@ def page_downloads():
                 
                 if added_count > 0:
                     filter_msg = f" from {len(subjects)} filtered" if filter_active else ""
-                    st.success(f"Added {added_count} files from {len(subjects) - incomplete_count} complete{filter_msg} subjects (skipped {skipped_count} already queued, {incomplete_count} incomplete)")
+                    toast_ok(
+                        f"Added {added_count} file(s) from {len(subjects) - incomplete_count} complete{filter_msg} subjects "
+                        f"({skipped_count} skipped, {incomplete_count} incomplete)"
+                    )
                     st.rerun()
                 else:
-                    st.info(f"No new files added ({skipped_count} already in queue, {incomplete_count} incomplete subjects)")
+                    st.caption(
+                        f"No new files added ({skipped_count} already in queue, {incomplete_count} incomplete subjects)."
+                    )
     
     with col3:
         session_select = st.selectbox(
@@ -3091,7 +3125,7 @@ def page_downloads():
     queue_items = dm.get_queue_items()
     
     if not queue_items:
-        st.info("No items in download queue. Add files from the subject browser or use Quick Select buttons above.")
+        st.caption("Queue is empty — add files from the Subjects page or use Quick Select above.")
     else:
         # Create queue table with action column
         queue_data = []
@@ -3135,7 +3169,7 @@ def page_downloads():
                             (item_id,)
                         )
                         if success:
-                            st.success(f"Removed item {item_id}")
+                            toast_ok(f"Removed item {item_id}")
                             st.rerun()
             
             # Bulk actions by status
@@ -3147,7 +3181,7 @@ def page_downloads():
                     removed = st.session_state.db.execute_query(
                         "DELETE FROM download_queue WHERE status = 'failed'"
                     )
-                    st.success(f"Removed all failed items")
+                    toast_ok("Removed all failed items")
                     st.rerun()
             
             with col2:
@@ -3155,7 +3189,7 @@ def page_downloads():
                     removed = st.session_state.db.execute_query(
                         "DELETE FROM download_queue WHERE status = 'completed'"
                     )
-                    st.success(f"Removed all completed items")
+                    toast_ok("Removed all completed items")
                     st.rerun()
             
             with col3:
@@ -3163,7 +3197,7 @@ def page_downloads():
                     st.session_state.db.execute_query(
                         "UPDATE download_queue SET status = 'queued', error_message = NULL WHERE status = 'failed'"
                     )
-                    st.success("Reset all failed items to queued")
+                    toast_ok("Failed items reset to queued")
                     st.rerun()
         
         # Get download stats
@@ -3193,7 +3227,7 @@ def page_downloads():
                         use_container_width=True,
                         disabled=stats['downloading'] == 0):
                 dm.pause_downloads()
-                st.info("Downloads paused")
+                toast_note("Downloads paused")
                 st.rerun()
         
         with col3:
@@ -3201,14 +3235,14 @@ def page_downloads():
                         use_container_width=True,
                         disabled=stats['paused'] == 0):
                 dm.resume_downloads()
-                st.success("Downloads resumed")
+                toast_ok("Downloads resumed")
                 st.rerun()
         
         with col4:
             if st.button("Clear Queue",
                         use_container_width=True):
                 cleared = dm.clear_queue('queued')
-                st.success(f"Cleared {cleared} items")
+                toast_ok(f"Cleared {cleared} queued item(s)")
                 st.rerun()
         
         # Download Statistics
@@ -3787,7 +3821,7 @@ def render_automated_qc_tab(auto_qc):
             subject_ids = [s['subject_id'] for s in subjects]
             
             if not subject_ids:
-                st.warning("No subjects found")
+                expected_empty("No subjects indexed yet. Sync datasets in Manage Datasets first.")
             else:
                 # Create progress container
                 progress_bar = st.progress(0)
@@ -4582,7 +4616,7 @@ def page_export():
                 subjects = st.session_state.db.get_all_subjects()
                 
                 if not subjects:
-                    st.warning("No subjects found")
+                    expected_empty("No subjects to export. Sync datasets in Manage Datasets first.")
                 else:
                     export_data = []
                     for subject in subjects:
@@ -4820,451 +4854,441 @@ def page_viewer():
     st.markdown('<h1 class="main-header">NIfTI Viewer</h1>', 
                 unsafe_allow_html=True)
     
-    st.markdown("Browse and visualize any NIfTI image")
+    # Top row: intro + file browser header side by side; browse controls stay compact above the viewer
+    top_intro, top_fb = st.columns([1, 1], gap="medium")
+    with top_intro:
+        st.markdown("Browse and visualize any NIfTI image")
+    with top_fb:
+        st.markdown("### File Browser")
     
     # Initialize agent factory for DANDI downloads
     if 'agent_factory' not in st.session_state:
         from src.agent_factory import AgentFactory
         st.session_state.agent_factory = AgentFactory(st.session_state.db)
     
-    # Two-column layout: File browser (left) | Viewer (right)
-    col_browser, col_viewer = st.columns([1, 2], gap="large")
+    browse_mode = st.radio(
+        "Browse Mode",
+        options=["From Indexed Datasets", "From File System"],
+        horizontal=True,
+        key="viewer_browse_mode"
+    )
     
-    with col_browser:
-        st.markdown("### File Browser")
-        
-        # Browse mode selector
-        browse_mode = st.radio(
-            "Browse Mode",
-            options=["From Indexed Datasets", "From File System"],
-            key="viewer_browse_mode"
-        )
-        
-        st.markdown("---")
-        
-        if browse_mode == "From File System":
-            # Direct file path input
-            st.markdown("**Browse Local Files**")
-            
-            # File path input
+    st.markdown("---")
+    
+    if browse_mode == "From File System":
+        st.markdown("**Browse Local Files**")
+        fp_col, dir_col = st.columns([1, 1], gap="medium")
+        with fp_col:
             file_path_input = st.text_input(
                 "NIfTI File Path",
                 placeholder="/path/to/file.nii.gz",
                 help="Enter the full path to a NIfTI file (.nii or .nii.gz)",
                 key="viewer_file_path"
             )
-            
-            # Quick directory browser
+        with dir_col:
             if 'viewer_current_dir' not in st.session_state:
                 st.session_state.viewer_current_dir = str(Path.home())
-            
             current_dir = st.text_input(
                 "Browse Directory",
                 value=st.session_state.viewer_current_dir,
                 key="viewer_dir_input",
                 help="Enter directory path to browse"
             )
+        
+        if current_dir and os.path.isdir(current_dir):
+            st.session_state.viewer_current_dir = current_dir
             
-            if current_dir and os.path.isdir(current_dir):
-                st.session_state.viewer_current_dir = current_dir
+            try:
+                nifti_files = []
+                for item in sorted(os.listdir(current_dir)):
+                    if item.endswith('.nii') or item.endswith('.nii.gz'):
+                        full_path = os.path.join(current_dir, item)
+                        if os.path.isfile(full_path):
+                            nifti_files.append(item)
                 
-                # List NIfTI files in directory
-                try:
-                    nifti_files = []
-                    for item in sorted(os.listdir(current_dir)):
-                        if item.endswith('.nii') or item.endswith('.nii.gz'):
-                            full_path = os.path.join(current_dir, item)
-                            if os.path.isfile(full_path):
-                                nifti_files.append(item)
-                    
-                    if nifti_files:
-                        st.markdown(f"**NIfTI Files in Directory** ({len(nifti_files)} found)")
+                if nifti_files:
+                    st.markdown(f"**NIfTI Files in Directory** ({len(nifti_files)} found)")
+                    list_col, btn_col = st.columns([3, 1], gap="medium")
+                    with list_col:
                         selected_file = st.selectbox(
                             "Select File",
                             options=nifti_files,
                             key="viewer_file_select"
                         )
-                        
+                    with btn_col:
+                        st.markdown("")  # align with selectbox label
+                        st.markdown("")
                         if selected_file:
                             file_path_input = os.path.join(current_dir, selected_file)
-                            
-                            if st.button("Load in Viewer →", use_container_width=True, type="primary"):
+                            if st.button("Load in Viewer →", use_container_width=True, type="primary", key="viewer_load_fs_pick"):
                                 st.session_state.viewer_selected_file = file_path_input
                                 st.session_state.viewer_file_loaded = True
                                 st.rerun()
-                    else:
-                        st.info("No NIfTI files found in this directory")
-                except PermissionError:
-                    st.error("Permission denied to read directory")
-                except Exception as e:
-                    st.error(f"Error reading directory: {str(e)}")
-            
-            # Manual path load
-            if file_path_input and os.path.exists(file_path_input):
-                st.caption(f"File exists: {Path(file_path_input).name}")
-                if st.button("Load from Path →", use_container_width=True, type="secondary"):
-                    st.session_state.viewer_selected_file = file_path_input
-                    st.session_state.viewer_file_loaded = True
-                    st.rerun()
+                else:
+                    st.info("No NIfTI files found in this directory")
+            except PermissionError:
+                st.error("Permission denied to read directory")
+            except Exception as e:
+                st.error(f"Error reading directory: {str(e)}")
         
+        if file_path_input and os.path.exists(file_path_input):
+            st.caption(f"File exists: {Path(file_path_input).name}")
+            if st.button("Load from Path →", use_container_width=True, type="secondary", key="viewer_load_fs_path"):
+                st.session_state.viewer_selected_file = file_path_input
+                st.session_state.viewer_file_loaded = True
+                st.rerun()
+    
+    else:
+        st.markdown("**Browse Indexed Datasets**")
+        if not st.session_state.db:
+            st.warning("Database not initialized")
         else:
-            # Browse from indexed datasets
-            st.markdown("**Browse Indexed Datasets**")
-            
-            if not st.session_state.db:
-                st.warning("Database not initialized")
-                return
-            
-            # Get all datasets
             all_datasets = st.session_state.db.get_all_datasets(status='active')
-            
             if not all_datasets:
                 st.info("No datasets available. Add datasets in Manage Datasets or switch to 'From File System' mode.")
-                return
-            
-            # Dataset selector
-            dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
-            selected_dataset_name = st.selectbox(
-                "Select Dataset",
-                options=list(dataset_options.keys()),
-                key="viewer_dataset_select"
-            )
-            
-            if selected_dataset_name:
-                selected_dataset_id = dataset_options[selected_dataset_name]
+            else:
+                dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
+                c_ds, c_sub, c_ses, c_scan = st.columns([2, 1, 1, 1], gap="small")
                 
-                # Get subjects for selected dataset
-                subjects = st.session_state.db.get_all_subjects(filters={'dataset_id': selected_dataset_id})
+                with c_ds:
+                    selected_dataset_name = st.selectbox(
+                        "Select Dataset",
+                        options=list(dataset_options.keys()),
+                        key="viewer_dataset_select"
+                    )
                 
-                if not subjects:
-                    st.info("No subjects indexed. Click 'Sync' in Manage Datasets or switch to 'From File System' mode.")
-                
-                # Subject selector
-                subject_options = [s['subject_id'] for s in subjects]
-                selected_subject_id = st.selectbox(
-                    "Select Subject",
-                    options=subject_options,
-                    key="viewer_subject_select"
+                selected_dataset_id = dataset_options[selected_dataset_name] if selected_dataset_name else None
+                subjects = (
+                    st.session_state.db.get_all_subjects(filters={'dataset_id': selected_dataset_id})
+                    if selected_dataset_id is not None else []
                 )
                 
-                if selected_subject_id:
-                    # Get sessions for selected subject
+                selected_subject_id = None
+                with c_sub:
+                    if not subjects:
+                        st.caption("No subjects indexed. Sync in Manage Datasets or use File System mode.")
+                    else:
+                        subject_options = [s['subject_id'] for s in subjects]
+                        selected_subject_id = st.selectbox(
+                            "Select Subject",
+                            options=subject_options,
+                            key="viewer_subject_select"
+                        )
+                
+                sessions = []
+                selected_session_id = None
+                if selected_subject_id and selected_dataset_id:
                     sessions = st.session_state.db.get_subject_sessions(selected_subject_id, selected_dataset_id)
+                
+                with c_ses:
+                    if selected_subject_id and selected_dataset_id:
+                        session_ids = [s['session_id'] for s in sessions]
+                        if session_ids:
+                            selected_session_id = st.selectbox(
+                                "Select Session",
+                                options=session_ids,
+                                key="viewer_session_select"
+                            )
+                        elif not sessions:
+                            st.caption(f"No sessions for {selected_subject_id}")
+                
+                scans = []
+                nifti_scans = []
+                scan_labels = []
+                selected_scan_idx = None
+                selected_dataset = None
+                if selected_session_id and selected_subject_id and selected_dataset_id:
+                    scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
+                    selected_dataset = next((d for d in all_datasets if d['id'] == selected_dataset_id), None)
+                    is_openneuro = selected_dataset and selected_dataset.get('platform') == 'openneuro'
                     
-                    if not sessions:
-                        st.info(f"No sessions found for {selected_subject_id}")
-                    
-                    # Session selector
-                    session_ids = [s['session_id'] for s in sessions]
-                    selected_session_id = st.selectbox(
-                        "Select Session",
-                        options=session_ids,
-                        key="viewer_session_select"
-                    )
-                    
-                    if selected_session_id:
-                        # Get scans for selected session
-                        scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
-                        
-                        # Check if this is an OpenNeuro dataset
-                        selected_dataset = next((d for d in all_datasets if d['id'] == selected_dataset_id), None)
-                        is_openneuro = selected_dataset and selected_dataset.get('platform') == 'openneuro'
-                        
-                        if not scans:
-                            if is_openneuro:
-                                st.info(f"OpenNeuro datasets must be downloaded before viewing.")
+                    if not scans:
+                        if is_openneuro:
+                            st.caption("OpenNeuro data must be downloaded locally before viewing here.")
+                            with st.expander("How to view OpenNeuro scans", expanded=False):
                                 st.markdown("""
-                                **To view OpenNeuro datasets:**
-                                1. Go to **Download Manager**
-                                2. Select subjects/sessions to download
-                                3. Download the data locally
-                                4. Return here and use **'From File System'** mode to browse downloaded files
+                                1. Open **Download Manager**
+                                2. Queue subjects or sessions and download
+                                3. Return here and use **From File System** to open the files
                                 """)
-                            else:
-                                st.info(f"No scans found for session {selected_session_id}")
-                        
-                        # Filter only NIfTI files
-                        nifti_scans = [
-                            s for s in scans 
-                            if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
-                        ]
-                        
-                        if not nifti_scans and scans:
-                            st.warning("No NIfTI files found in this session")
-                        
-                        # Scan selector with modality info
-                        scan_labels = []
-                        for scan in nifti_scans:
-                            modality = scan.get('modality', 'unknown')
-                            suffix = scan.get('suffix', '')
-                            label = f"{modality}_{suffix}" if suffix else modality
-                            scan_labels.append(label)
-                        
+                        else:
+                            st.caption(f"No scans found for session {selected_session_id}.")
+                    
+                    nifti_scans = [
+                        s for s in scans
+                        if s['file_path'].endswith('.nii') or s['file_path'].endswith('.nii.gz')
+                    ]
+                    if not nifti_scans and scans:
+                        st.warning("No NIfTI files found in this session")
+                    for scan in nifti_scans:
+                        modality = scan.get('modality', 'unknown')
+                        suffix = scan.get('suffix', '')
+                        label = f"{modality}_{suffix}" if suffix else modality
+                        scan_labels.append(label)
+                
+                with c_scan:
+                    if nifti_scans:
                         selected_scan_idx = st.selectbox(
                             "Select Scan",
-                            options=range(len(nifti_scans)),
+                            options=list(range(len(nifti_scans))),
                             format_func=lambda i: scan_labels[i],
                             key="viewer_scan_select"
                         )
-                        
-                        if selected_scan_idx is not None:
-                            selected_scan = nifti_scans[selected_scan_idx]
-                            
-                            # Display scan info
-                            st.markdown("---")
-                            st.markdown("**Selected Scan**")
-                            st.caption(f"File: {Path(selected_scan['file_path']).name}")
-                            st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
-                            st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
-                            
-                            # Load button
-                            if st.button("Load in Viewer →", use_container_width=True, type="primary"):
-                                # Store both the file path and dataset info for DANDI handling
-                                st.session_state.viewer_selected_file = selected_scan['file_path']
-                                st.session_state.viewer_dataset_id = selected_dataset_id
-                                st.session_state.viewer_dataset_platform = selected_dataset.get('platform')
-                                st.session_state.viewer_file_loaded = True
-                                st.rerun()
+                
+                if nifti_scans and selected_scan_idx is not None:
+                    selected_scan = nifti_scans[selected_scan_idx]
+                    with st.expander("Selected scan details", expanded=False):
+                        st.caption(f"File: {Path(selected_scan['file_path']).name}")
+                        st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
+                        st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
+                    if st.button("Load in Viewer →", use_container_width=True, type="primary", key="viewer_load_indexed"):
+                        st.session_state.viewer_selected_file = selected_scan['file_path']
+                        st.session_state.viewer_dataset_id = selected_dataset_id
+                        st.session_state.viewer_dataset_platform = selected_dataset.get('platform') if selected_dataset else None
+                        st.session_state.viewer_file_loaded = True
+                        st.rerun()
     
-    with col_viewer:
-        st.markdown("### Viewer")
-        
-        # Check if file is loaded
-        file_path = st.session_state.get('viewer_selected_file', '')
-        file_loaded = 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded
-        
-        # Handle DANDI files specially (need to download temporarily)
-        local_file_path = file_path
-        is_dandi = st.session_state.get('viewer_dataset_platform') == 'dandi'
-        
-        if file_loaded and file_path:
-            if is_dandi and not os.path.exists(file_path):
-                # DANDI file - need to download temporarily
-                st.markdown(f"**File:** {Path(file_path).name}")
-                st.caption(f"Platform: DANDI (streaming)")
-                
-                # Get dataset info
-                dataset_id = st.session_state.get('viewer_dataset_id')
-                dataset = st.session_state.db.get_dataset(dataset_id)
-                dandiset_id = dataset['dataset_id_external']
-                
-                # Create temp directory
-                temp_dir = Path('data/temp_viewer')
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                local_file_path = temp_dir / Path(file_path).name
-                
-                # Check if already downloaded
-                if not local_file_path.exists():
-                    with st.spinner(f"Downloading from DANDI... (this may take a moment for large files)"):
-                        # Get agent for this dataset (platform determined automatically)
-                        agent = st.session_state.agent_factory.get_agent(dataset_id)
-                        
-                        # Download file
-                        success = agent.download_file(
-                            dandiset_id=dandiset_id,
-                            asset_path=file_path,
-                            local_path=str(local_file_path)
-                        )
-                        
-                        if not success:
-                            st.error("Failed to download file from DANDI")
-                            st.session_state.viewer_file_loaded = False
-                            local_file_path = None
-                        else:
-                            st.success("File downloaded successfully!")
-                else:
-                    st.info("Using cached file")
+    st.markdown("---")
+    st.markdown("### Viewer")
+    
+    # Check if file is loaded
+    file_path = st.session_state.get('viewer_selected_file', '')
+    file_loaded = 'viewer_file_loaded' in st.session_state and st.session_state.viewer_file_loaded
+    
+    # Handle DANDI files specially (need to download temporarily)
+    local_file_path = file_path
+    is_dandi = st.session_state.get('viewer_dataset_platform') == 'dandi'
+    
+    if file_loaded and file_path:
+        if is_dandi and not os.path.exists(file_path):
+            # DANDI file - need to download temporarily
+            st.markdown(f"**File:** {Path(file_path).name}")
+            st.caption(f"Platform: DANDI (streaming)")
             
-            elif not os.path.exists(file_path):
-                st.error(f"File not found: {file_path}")
-                st.session_state.viewer_file_loaded = False
-                local_file_path = None
-        
-        # Display file info or empty state
-        if file_loaded and local_file_path and os.path.exists(local_file_path):
-            if not is_dandi:
-                st.markdown(f"**File:** {Path(local_file_path).name}")
-                st.caption(f"Path: {local_file_path}")
+            # Get dataset info
+            dataset_id = st.session_state.get('viewer_dataset_id')
+            dataset = st.session_state.db.get_dataset(dataset_id)
+            dandiset_id = dataset['dataset_id_external']
             
-            # Check file size before attempting to load (max 500MB for browser-based viewing)
-            file_size_mb = os.path.getsize(local_file_path) / (1024 * 1024)
+            # Create temp directory
+            temp_dir = Path('data/temp_viewer')
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            local_file_path = temp_dir / Path(file_path).name
             
-            if file_size_mb > 500:
-                st.warning(f"⚠️ File is too large for browser-based viewing ({file_size_mb:.1f} MB). Files larger than 500 MB may cause browser memory issues.")
-                st.info("**Tip:** For large files, consider using external tools like FSLeyes or ITK-SNAP for visualization.")
-                file_loaded = False
-            else:
-                # Get file info using nibabel
-                import nibabel as nib
-                try:
-                    nifti_img = nib.load(str(local_file_path))
-                    img_data = nifti_img.get_fdata()
+            # Check if already downloaded
+            if not local_file_path.exists():
+                with st.spinner(f"Downloading from DANDI... (this may take a moment for large files)"):
+                    # Get agent for this dataset (platform determined automatically)
+                    agent = st.session_state.agent_factory.get_agent(dataset_id)
                     
-                    col_info1, col_info2, col_info3 = st.columns(3)
-                    with col_info1:
-                        st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
-                    with col_info2:
-                        voxel_sizes = nifti_img.header.get_zooms()
-                        st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
-                    with col_info3:
-                        st.metric("Data Type", str(img_data.dtype))
-                except Exception as e:
-                    st.error(f"Failed to load file info: {str(e)}")
+                    # Download file
+                    success = agent.download_file(
+                        dandiset_id=dandiset_id,
+                        asset_path=file_path,
+                        local_path=str(local_file_path)
+                    )
+                    
+                    if not success:
+                        st.error("Failed to download file from DANDI")
+                        st.session_state.viewer_file_loaded = False
+                        local_file_path = None
+                    else:
+                        toast_ok("File downloaded — ready to view.")
+            else:
+                st.caption("Using cached copy in temp folder.")
+        
+        elif not os.path.exists(file_path):
+            st.error(f"File not found: {file_path}")
+            st.session_state.viewer_file_loaded = False
+            local_file_path = None
+    
+    # Display file info or empty state
+    if file_loaded and local_file_path and os.path.exists(local_file_path):
+        if not is_dandi:
+            st.markdown(f"**File:** {Path(local_file_path).name}")
+            st.caption(f"Path: {local_file_path}")
+        
+        # Check file size before attempting to load (max 500MB for browser-based viewing)
+        file_size_mb = os.path.getsize(local_file_path) / (1024 * 1024)
+        
+        if file_size_mb > 500:
+            st.warning(
+                f"File too large for in-browser viewing ({file_size_mb:.1f} MB; limit 500 MB). "
+                "Open it in FSLeyes, ITK-SNAP, or another desktop viewer instead."
+            )
+            file_loaded = False
         else:
-            if not file_loaded:
-                st.info("No file loaded. Select a NIfTI file from the browser on the left.")
+            # Get file info using nibabel
+            import nibabel as nib
+            try:
+                nifti_img = nib.load(str(local_file_path))
+                img_data = nifti_img.get_fdata()
+                
+                col_info1, col_info2, col_info3 = st.columns(3)
+                with col_info1:
+                    st.metric("Dimensions", f"{img_data.shape[0]} × {img_data.shape[1]} × {img_data.shape[2]}")
+                with col_info2:
+                    voxel_sizes = nifti_img.header.get_zooms()
+                    st.metric("Voxel Size (mm)", f"{voxel_sizes[0]:.2f} × {voxel_sizes[1]:.2f} × {voxel_sizes[2]:.2f}")
+                with col_info3:
+                    st.metric("Data Type", str(img_data.dtype))
+            except Exception as e:
+                st.error(f"Failed to load file info: {str(e)}")
+    else:
+        if not file_loaded:
+            st.caption("No file loaded — use the browse controls above to select a NIfTI file.")
+    
+    st.markdown("---")
+    
+    # niivue viewer with 3-plane view (axial, sagittal, coronal)
+    import streamlit.components.v1 as components
+    import base64
+    
+    # Prepare file data for niivue (file size already checked above)
+    if file_loaded and local_file_path and os.path.exists(local_file_path):
+        # Read file and convert to base64 for embedding
+        with open(local_file_path, 'rb') as f:
+            file_bytes = f.read()
+            file_b64 = base64.b64encode(file_bytes).decode()
         
-        st.markdown("---")
+        file_name = Path(local_file_path).name
         
-        # niivue viewer with 3-plane view (axial, sagittal, coronal)
-        import streamlit.components.v1 as components
-        import base64
-        
-        # Prepare file data for niivue (file size already checked above)
-        if file_loaded and local_file_path and os.path.exists(local_file_path):
-            # Read file and convert to base64 for embedding
-            with open(local_file_path, 'rb') as f:
-                file_bytes = f.read()
-                file_b64 = base64.b64encode(file_bytes).decode()
-            
-            file_name = Path(local_file_path).name
-            
-            # niivue HTML with file loaded
-            niivue_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <style>
-                        html, body {{ 
-                            margin: 0; 
-                            padding: 0; 
-                            width: 100%;
-                            height: 100%;
-                            overflow: hidden;
-                        }}
+        # niivue HTML with file loaded
+        niivue_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    html, body {{ 
+                        margin: 0; 
+                        padding: 0; 
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                    }}
                         #canvas {{ 
                             width: 100vw; 
-                            height: 700px;
+                            height: 720px;
                             display: block;
                         }}
-                    </style>
-                </head>
-                <body>
-                    <canvas id="canvas"></canvas>
-                    <script src="https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"></script>
-                    <script>
-                        // Convert base64 to ArrayBuffer
-                        function base64ToArrayBuffer(base64) {{
-                            const binaryString = atob(base64);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {{
-                                bytes[i] = binaryString.charCodeAt(i);
-                            }}
-                            return bytes.buffer;
+                </style>
+            </head>
+            <body>
+                <canvas id="canvas"></canvas>
+                <script src="https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"></script>
+                <script>
+                    // Convert base64 to ArrayBuffer
+                    function base64ToArrayBuffer(base64) {{
+                        const binaryString = atob(base64);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {{
+                            bytes[i] = binaryString.charCodeAt(i);
                         }}
+                        return bytes.buffer;
+                    }}
+                    
+                    // Initialize niivue with better defaults
+                    const nv = new niivue.Niivue({{
+                        show3Dcrosshair: true,
+                        backColor: [0, 0, 0, 1],
+                        crosshairColor: [1, 0, 0, 1],
+                        textHeight: 0.05,
+                        colorbarHeight: 0.05
+                    }});
+                    
+                    nv.attachToCanvas(document.getElementById('canvas'));
+                    
+                    // Load NIfTI from base64 using Blob approach
+                    const fileData = base64ToArrayBuffer('{file_b64}');
+                    const blob = new Blob([fileData], {{ type: 'application/gzip' }});
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    const volumeList = [{{
+                        url: blobUrl,
+                        name: '{file_name}',
+                        colormap: 'gray'
+                    }}];
+                    
+                    nv.loadVolumes(volumeList).then(() => {{
+                        nv.setSliceType(nv.sliceTypeMultiplanar);
+                        nv.setClipPlane([0, 0, 90]);
                         
-                        // Initialize niivue with better defaults
-                        const nv = new niivue.Niivue({{
-                            show3Dcrosshair: true,
-                            backColor: [0, 0, 0, 1],
-                            crosshairColor: [1, 0, 0, 1],
-                            textHeight: 0.05,
-                            colorbarHeight: 0.05
-                        }});
+                        // Ensure canvas fills and renders properly
+                        setTimeout(() => {{
+                            nv.drawScene();
+                        }}, 100);
                         
-                        nv.attachToCanvas(document.getElementById('canvas'));
-                        
-                        // Load NIfTI from base64 using Blob approach
-                        const fileData = base64ToArrayBuffer('{file_b64}');
-                        const blob = new Blob([fileData], {{ type: 'application/gzip' }});
-                        const blobUrl = URL.createObjectURL(blob);
-                        
-                        const volumeList = [{{
-                            url: blobUrl,
-                            name: '{file_name}',
-                            colormap: 'gray'
-                        }}];
-                        
-                        nv.loadVolumes(volumeList).then(() => {{
-                            nv.setSliceType(nv.sliceTypeMultiplanar);
-                            nv.setClipPlane([0, 0, 90]);
-                            
-                            // Ensure canvas fills and renders properly
-                            setTimeout(() => {{
-                                nv.drawScene();
-                            }}, 100);
-                            
-                            console.log('NIfTI loaded successfully');
-                            URL.revokeObjectURL(blobUrl);
-                        }}).catch(err => {{
-                            console.error('Error loading NIfTI:', err);
-                            document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
-                            URL.revokeObjectURL(blobUrl);
-                        }});
-                    </script>
-                </body>
-                </html>
-            """
-        else:
-            # niivue HTML with placeholder
-            niivue_html = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <style>
-                        body { 
-                            margin: 0; 
-                            padding: 0; 
-                            display: flex; 
-                            align-items: center; 
-                            justify-content: center; 
-                            height: 600px;
+                        console.log('NIfTI loaded successfully');
+                        URL.revokeObjectURL(blobUrl);
+                    }}).catch(err => {{
+                        console.error('Error loading NIfTI:', err);
+                        document.body.innerHTML = '<div style="padding: 20px; color: red;">Error loading NIfTI file: ' + err + '</div>';
+                        URL.revokeObjectURL(blobUrl);
+                    }});
+                </script>
+            </body>
+            </html>
+        """
+    else:
+        # niivue HTML with placeholder
+        niivue_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { 
+                        margin: 0; 
+                        padding: 0; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                            height: 720px;
                             background-color: #f0f0f0;
-                        }
-                        .placeholder {
-                            text-align: center;
-                            color: #888;
-                            font-family: sans-serif;
-                        }
-                        .placeholder h3 {
-                            margin: 0 0 10px 0;
-                            color: #555;
-                        }
-                        .views {
-                            display: grid;
-                            grid-template-columns: 1fr 1fr;
-                            gap: 10px;
-                            margin-top: 20px;
-                        }
-                        .view-box {
-                            width: 150px;
-                            height: 150px;
-                            border: 2px dashed #ccc;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            color: #999;
-                            font-size: 14px;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="placeholder">
-                        <h3>NIfTI Viewer Ready</h3>
-                        <p>Load a NIfTI file from the browser to visualize</p>
-                        <div class="views">
-                            <div class="view-box">Axial</div>
-                            <div class="view-box">Sagittal</div>
-                            <div class="view-box">Coronal</div>
-                            <div class="view-box">3D</div>
-                        </div>
+                    }
+                    .placeholder {
+                        text-align: center;
+                        color: #888;
+                        font-family: sans-serif;
+                    }
+                    .placeholder h3 {
+                        margin: 0 0 10px 0;
+                        color: #555;
+                    }
+                    .views {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 10px;
+                        margin-top: 20px;
+                    }
+                    .view-box {
+                        width: 150px;
+                        height: 150px;
+                        border: 2px dashed #ccc;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #999;
+                        font-size: 14px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="placeholder">
+                    <h3>NIfTI Viewer Ready</h3>
+                    <p>Load a NIfTI file from the browser to visualize</p>
+                    <div class="views">
+                        <div class="view-box">Axial</div>
+                        <div class="view-box">Sagittal</div>
+                        <div class="view-box">Coronal</div>
+                        <div class="view-box">3D</div>
                     </div>
-                </body>
-                </html>
-            """
-        
-        # Render niivue viewer
-        components.html(niivue_html, height=720, scrolling=False)
+                </div>
+            </body>
+            </html>
+        """
+    
+    # Render niivue viewer (full width below browse controls)
+    components.html(niivue_html, height=800, scrolling=False)
 
 
 def page_transfer():
@@ -5378,8 +5402,7 @@ def page_transfer():
                 if len(source_subjects) > 20:
                     st.caption(f"Showing 20 of {len(source_subjects)} subjects. Use filters for more.")
         else:
-            st.warning("No subjects indexed")
-            st.info("Click 'Sync' in Manage Datasets to index subjects")
+            expected_empty("No subjects indexed yet. Sync this dataset in Manage Datasets to browse here.")
             selected_subjects = []
     
     # MIDDLE: Transfer Controls
@@ -5411,8 +5434,9 @@ def page_transfer():
         }
         
         if not dest_dataset_options:
-            st.warning("No valid destinations")
-            st.info("Add upload-capable datasets in Manage Datasets")
+            st.caption(
+                "No upload-capable destination datasets. Add Pennsieve, XNAT, HPC, or Remote Server in Manage Datasets."
+            )
             dest_dataset = None
         else:
             selected_dest_display = st.selectbox(
@@ -5443,7 +5467,7 @@ def page_transfer():
                     if len(dest_subjects) > 20:
                         st.caption(f"... and {len(dest_subjects) - 20} more")
                 else:
-                    st.info("No subjects yet")
+                    st.caption("No subjects on this destination yet.")
     
     st.markdown("---")
     
