@@ -31,13 +31,13 @@ venv.bak/
 .env
 .env.local
 
-# Database
+# Database (no committed DB; only placeholder under data/)
 *.db
 *.sqlite
 *.sqlite3
-data/*.db
-data/*.sqlite
-data/temp_viewer/
+# Ignore all contents of data/ except the placeholder
+data/*
+!data/.gitkeep
 
 # Streamlit
 .streamlit/secrets.toml
@@ -87,7 +87,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Internal Documents (not for GitHub)
+# Internal / local-only docs and scratch (not published on GitHub)
 ROADMAP.md
 NEW_FEATURES.md
 NAVIGATION_TEST.md
@@ -107,3 +107,15 @@ test_download_manager.py
 test_download_workflow.py
 test_qc_dashboard.py
 test_browse_subjects.py
+BIDS_EEG_PLAN.md
+CHANGES_APPLIED.md
+TESTS_COMPLETE.txt
+TEST_RESULTS.md
+UI_UX_TEST_RESULTS.md
+UX.md
+painpoint.md
+WINSCP_REDESIGN.md
+create_favicon.py
+test_db_load.py
+test_keyword_filters.py
+docs/PRODUCTION_ROADMAP.md

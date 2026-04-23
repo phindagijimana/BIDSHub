@@ -1,7 +1,5 @@
 """
 Calm UI helpers for Streamlit: less banner noise, toasts for transient feedback.
-
-See UX.md for principles.
 """
 
 from __future__ import annotations
