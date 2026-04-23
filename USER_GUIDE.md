@@ -18,7 +18,8 @@ Last Updated: April 2026
 7. [Quality Control](#quality-control)
 8. [Managing Multiple Datasets](#managing-multiple-datasets)
 9. [Advanced Workflows](#advanced-workflows)
-10. [Troubleshooting](#troubleshooting)
+10. [Troubleshooting](TROUBLESHOOTING.md)
+11. [Security, development, and releases](#security-development-and-releases)
 
 ---
 
@@ -72,9 +73,9 @@ See [Platform Connections](#platform-connections) for setup detail.
 - **OS:** macOS, Linux, **Windows** (native via `bin\explorer.bat` or WSL for `hub-docker` bash scripts).
 - **BIDS data** and, for cloud sources, **credentials** as required by each platform.
 - **Pennsieve:** native install can pull the agent via `./hub install` when needed.
-- **Version** is in `src/bidshub_version.py` and the app sidebar. Release process: [RELEASING.md](RELEASING.md), [CHANGELOG.md](CHANGELOG.md), [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md).
+- **Version** is in `src/bidshub_version.py` and the app sidebar. Release and dev workflow: [Security, development, and releases](#security-development-and-releases) at the end of this guide.
 
-**Native (recommended) production** setup: [docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md), [CONTRIBUTING.md](CONTRIBUTING.md).
+**Native (recommended) production:** clone the repo, `./hub install` / `./hub start` (summary in that same section).
 
 ### BIDS dataset layout (checklist)
 
@@ -100,7 +101,7 @@ From a **git clone** of the repo at the project root:
 - First run can create **`.env`** from **`.env.example`**. Edit **`.env`** for API keys and paths, or set credentials in the app.
 - URL defaults to **`http://localhost:8501`**, or the next free port in **8501–8551** (override with **`BIDSHUB_DEFAULT_PORT`**; for Docker host publish, **`BIDSHUB_HOST_PORT`** in `.env`).
 
-**Docker image:** single service; Streamlit; SQLite under `/app/data`; healthcheck; non-root uid **1000**; compose bind-mounts **host `./data` → `/app/data`**. On Linux, if SQLite errors on permissions: e.g. `chown -R 1000:1000 data`. Read [SECURITY.md](SECURITY.md) before exposing a port. Some platform-specific tools are **validated mainly on the native path**; use Docker only if your team has checked your workflow.
+**Docker image:** single service; Streamlit; SQLite under `/app/data`; healthcheck; non-root uid **1000**; compose bind-mounts **host `./data` → `/app/data`**. On Linux, if SQLite errors on permissions: e.g. `chown -R 1000:1000 data`. Do not publish a port to untrusted networks without TLS and a reverse proxy (see [Security, development, and releases](#security-development-and-releases)). Some platform-specific tools are **validated mainly on the native path**; use Docker only if your team has checked your workflow.
 
 **Pre-built / registry image** (no `docker build` on the target):
 
@@ -110,7 +111,7 @@ export BIDSHUB_IMAGE=ghcr.io/YOUR_ORG/bidshub:3.1.1
 ./hub-docker pull && ./hub-docker start
 ```
 
-`BIDSHUB_DOCKER_FILE` selects build compose vs image-only compose. Go-live notes: [docs/PRODUCTION_GO_LIVE.md](docs/PRODUCTION_GO_LIVE.md). Registry workflow: [RELEASING.md](RELEASING.md).
+`BIDSHUB_DOCKER_FILE` selects build compose vs image-only compose. For registry build/push and go-live, see [Security, development, and releases](#security-development-and-releases).
 
 ### Environment file (`.env`)
 
@@ -128,9 +129,7 @@ You can instead configure many options in the app after launch.
 ### Security (local and Docker)
 
 - Keep **API secrets** in **`.env`** on your machine only; never commit real keys. Rotate keys in the provider UI if they leak.
-- **Native:** use **localhost** in normal use. **Docker** publishes a host port; use only on **trusted** networks. Do not put Streamlit on the public internet without a **reverse proxy, TLS, and authentication**.
-
-Full policy: [SECURITY.md](SECURITY.md).
+- **Native:** use **localhost** in normal use. **Docker** publishes a host port; use only on **trusted** networks, or add **TLS and authentication** in front. More: [Security, development, and releases](#security-development-and-releases).
 
 ### First run (short)
 
@@ -2665,392 +2664,7 @@ Both have same subject IDs
 
 ---
 
-## Troubleshooting
-
-### BIDS, ports, metadata, and local database (quick)
-
-- **BIDS validation failed:** run `bids-validator /path/to/dataset`; require `dataset_description.json` and `sub-*` layout; use [bids.neuroimaging.io](https://bids.neuroimaging.io/). DICOM must be converted first (e.g. [dcm2bids](https://unfmontreal.github.io/Dcm2Bids/)). See [Overview, BIDS, and installation](#overview-bids-and-installation) above.
-- **Missing metadata in filters:** ensure `participants.tsv` with `participant_id` and useful columns (`age`, `sex`, `diagnosis`, `group`, …) when you need filtering.
-- **Port in use or wrong port:** the launchers try **8501** then the next free port into **~8551**; set **`BIDSHUB_DEFAULT_PORT`** (or **`BIDSHUB_HOST_PORT`** for Docker) in the environment or `.env`.
-- **Cannot connect to a platform:** check credentials, network, and IDs (**case-sensitive**): Pennsieve dataset name must match; OpenNeuro uses `ds00…` form; DANDI uses 6-digit dandiset ids (e.g. `000001`).
-- **Local database / cache issues:** from the project root, `./hub clean` then `./hub install` (or equivalent for your install). Deeper help: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
-
-### Connection Issues
-
-#### Problem: "Failed to connect to Pennsieve"
-
-**Possible Causes**:
-1. Invalid credentials
-2. No internet connection
-3. Pennsieve service down
-
-**Solutions**:
-
-**Check credentials**:
-```
-1. Go to Pennsieve web app
-2. Settings -> API Keys
-3. Verify key and secret match what you entered
-4. Generate new keys if needed
-```
-
-**Test connection**:
-```bash
-# Test outside BIDSHub
-pip install pennsieve2
-python
->>> from pennsieve import Pennsieve
->>> ps = Pennsieve(api_token='your-key', api_secret='your-secret')
->>> ps.datasets()
-```
-
-**Check internet**:
-```bash
-ping pennsieve.io
-# Should show successful ping responses
-```
-
----
-
-#### Problem: "OpenNeuro dataset not found"
-
-**Cause**: Invalid dataset ID
-
-**Solutions**:
-
-**Verify dataset ID**:
-1. Go to https://openneuro.org
-2. Find your dataset
-3. URL shows ID: `openneuro.org/datasets/ds003974`
-4. ID is: `ds003974`
-5. Enter exactly this in BIDSHub (case-sensitive)
-
-**Common mistakes**:
-- Wrong: `DS003974` (uppercase)
-- Wrong: `3974` (missing ds prefix)
-- Right: `ds003974`
-
----
-
-#### Problem: "XNAT authentication failed"
-
-**Possible Causes**:
-1. Wrong server URL
-2. Incorrect username/password
-3. Project ID doesn't exist or no access
-
-**Solutions**:
-
-**Verify server URL**:
-```
-Common formats:
-OK https://xnat.uni.edu
-OK https://central.xnat.org
-OK http://xnat-server:8080
-
-Common mistakes:
-X xnat.uni.edu (missing https://)
-X https://xnat.uni.edu/ (trailing slash may cause issues)
-```
-
-**Test credentials**:
-```python
-# Test XNAT connection
-pip install xnat
-python
->>> import xnat
->>> session = xnat.connect('https://xnat.uni.edu', user='username', password='password')
->>> session.projects # Should list projects
-```
-
-**Check project access**:
-- Verify you have permissions for the project
-- Contact XNAT administrator if access denied
-
----
-
-### Browsing Issues
-
-#### Problem: "No subjects found"
-
-**For cloud datasets**:
-
-**Cause**: Dataset not synced yet
-
-**Solution**:
-```
-1. Subjects page (top right corner)
-2. Look for "Sync" button or message
-3. Click "Sync Datasets"
-4. Wait for sync to complete
-5. Subjects appear
-```
-
-**For local datasets**:
-
-**Cause**: Invalid BIDS structure
-
-**Check**:
-```bash
-# Verify BIDS structure
-cd /path/to/dataset/
-ls
-
-Required:
-OK dataset_description.json
-OK participants.tsv
-OK sub-001/ (at least one subject)
-
-# Check subject folders
-ls -d sub-*/
-# Should show: sub-001/ sub-002/ ...
-```
-
-**Solution**: Fix BIDS structure, then Re-index:
-```
-Manage Datasets -> Find dataset -> Click "Re-index"
-```
-
----
-
-#### Problem: Subjects table is empty after filtering
-
-**Cause**: Too restrictive filters
-
-**Solution**:
-```
-1. Clear one filter at a time
-2. Start broad, narrow down gradually
-
-Example:
-- Remove search query
-- Set QC status to "All"
-- Set session to "All"
-- Click "Apply Filters"
-- Subjects should reappear
-```
-
----
-
-### Viewer Issues
-
-#### Problem: "Image file not found"
-
-**For cloud datasets**:
-
-**Cause**: File not downloaded yet (stub file)
-
-**Solution**:
-```
-1. Note the file path from error
-2. Navigate to: Subjects page -> Find subject
-3. Click: v Queue next to the scan
-4. Navigate to: Downloads page
-5. Click: > Start Queue
-6. Wait for download
-7. Return to subject -> Click [View] View again
-8. Image loads successfully
-```
-
-**For local datasets**:
-
-**Cause**: File moved or deleted
-
-**Solution**:
-```bash
-# Check if file exists
-ls /path/from/error/message
-
-# If dataset was moved:
-1. Manage Datasets -> Remove dataset
-2. Add dataset again with correct path
-3. Re-index will find files
-```
-
----
-
-#### Problem: "Stub file detected" warning
-
-**Message shown**:
-```
-WARNING: Stub File Detected
-
-This file appears to be a metadata stub without actual image data.
-To view this image, please download it first using the Download Manager.
-```
-
-**Explanation**:
-- Cloud-only mode creates "stub files" (small placeholder files)
-- Stub has metadata (JSON) but no actual image data
-- File size: <1 KB (real images are 10+ MB)
-
-**Solution**:
-```
-1. Click "Go to Download Manager" (in warning box)
-2. Or navigate manually to Downloads page
-3. Queue the scan for download
-4. Start download
-5. Wait for completion
-6. Return to viewer -> Image loads
-```
-
----
-
-#### Problem: Viewer is slow or unresponsive
-
-**Possible Causes**:
-
-**Large 4D file** (fMRI with 200+ volumes):
-```
-Loading image...
-[Progress bar] - 65%
-Taking longer than usual...
-```
-
-**Solution**: Wait (4D files take 10-30 seconds to load)
-
-**Network storage with high latency**:
-- Local datasets on NAS may be slow
-- Copy to local SSD for better performance
-
-**Low memory**:
-- Very large images (>2 GB) may struggle
-- Close other applications
-- Restart BIDSHub
-
----
-
-### Download Issues
-
-#### Problem: Downloads fail repeatedly
-
-**Error shown**:
-```
-X Failed: TBI011007_T1w.nii.gz
- Error: Connection timeout
-  
-Auto-retry: Attempt 3 of 3 failed
-```
-
-**Solutions**:
-
-**Check internet**:
-```bash
-# Test download speed
-speedtest-cli
-
-# Should have: >5 Mbps download speed
-```
-
-**Check disk space**:
-```bash
-# Mac/Linux
-df -h /path/to/download/directory
-
-# Should show: Sufficient free space
-```
-
-**Retry manually**:
-```
-1. Clear failed items from queue
-2. Re-queue them
-3. Start queue again
-4. If still fails: Check platform status
-```
-
-**Check platform status**:
-- Pennsieve: Check status.pennsieve.io
-- OpenNeuro: Check openneuro.org (website loading?)
-- XNAT: Contact your institution's IT
-
----
-
-#### Problem: "Insufficient disk space" error
-
-**Message**:
-```
-ERROR Cannot download: Insufficient disk space
-
-Required: 15 GB
-Available: 8 GB
-```
-
-**Solutions**:
-
-**Free up space**:
-```bash
-# Check current usage
-df -h
-
-# Delete unnecessary files
-# Empty trash
-# Move old datasets to external drive
-```
-
-**Download to different location**:
-```
-1. Manage Datasets -> Find dataset -> Update Creds
-2. Change "Local Working Directory" to drive with more space
-3. Re-sync dataset
-4. Downloads go to new location
-```
-
-**Download selectively**:
-```
-1. Downloads page -> Use metadata filters
-2. Download fewer subjects or modalities
-3. Download in batches (50 subjects at a time)
-```
-
----
-
-### Performance Issues
-
-#### Problem: Slow browsing with many datasets
-
-**Symptom**: Subjects table takes 5+ seconds to load
-
-**Cause**: Too many datasets selected (10+)
-
-**Solutions**:
-
-**Deselect unused datasets**:
-```
-Dataset Filter
-[ ] [Pennsieve] Old_Study_2020 <- Uncheck unused datasets
-[ ] [OpenNeuro] Test_Dataset
-[X] [Local] Current_Project <- Keep only current work
-```
-
-**Or deactivate temporarily**:
-```
-Manage Datasets -> Find dataset -> Click "Deactivate"
--> Dataset hidden from all views
--> Can reactivate later
-```
-
----
-
-#### Problem: Viewer takes long to load
-
-**Cause**: Large file or network storage
-
-**Solutions**:
-
-**For large 4D files** (fMRI):
-- Wait patiently (may take 30-60 seconds)
-- Consider downsampling files if viewing only
-
-**For network storage**:
-```bash
-# Copy to local disk first
-cp /mnt/nas/dataset/sub-001/...T1w.nii.gz /tmp/
-# Then view from /tmp/ (much faster)
-```
-
-**For compressed files**:
-- BIDSHub handles .nii.gz natively
-- No need to decompress manually
+**Further help:** for install, pip, venv, Docker, platform issues, and security, see **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**. Quick BIDS, port, and database checks are in [Overview, BIDS, and installation](#overview-bids-and-installation) above.
 
 ---
 
@@ -3447,9 +3061,7 @@ Recommended frequency:
 
 ### Documentation
 
-- **USER_GUIDE.md** - This complete user guide (product overview, BIDS, install, workflows)
-- **TROUBLESHOOTING.md** - Common issues and solutions
-- **README.md** - Short project intro, CLI table, and links
+The repository has **three** top-level guides: **[README.md](README.md)** (quick intro and CLI), **this User Guide** (product, BIDS, workflows, security, and maintainers), and **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** (install, pip, Docker, and fixes).
 
 ### Getting Help
 
@@ -3545,6 +3157,73 @@ Throughout BIDSHub, you'll see color-coded status badges:
 
 ---
 
+## Security, development, and releases
+
+### Vulnerability reporting
+
+If you find a security issue in **this repository’s code** (not in third-party platforms such as Pennsieve or OpenNeuro), report it privately to the maintainers (for example a private security advisory on the project host, or the repository owner). Do not post exploit details in public issues until a fix is agreed.
+
+### Credentials, data, and network
+
+- Never commit **`.env`**, API keys, or database files with sensitive workflow data. Rotate keys in the **provider’s console** if they are ever exposed.
+- Treat local `data/*.db` like any file with metadata about your research workflow: back up and share under your institution’s rules.
+- Prefer **localhost** for the native app. **Docker** with a published port on a machine reachable from untrusted networks increases risk—use host firewalls, VPN, or a **reverse proxy with TLS and authentication**. Cloud platform use is subject to each provider’s terms; BIDSHub stores **your** credentials **locally** as configured in the app or `.env`.
+
+### For developers: setup and tests
+
+```bash
+./hub install
+pip install -r requirements-dev.txt
+```
+
+`./hub install` installs the locked app stack (`requirements.txt`); tests and lock maintenance use `requirements-dev.txt`. Run tests: `python -m pytest tests/ -q` (see `pytest.ini`; the optional `dandi` pytest plugin is disabled in CI). `BIDSHUB_NONINTERACTIVE=1` is set by `./hub install` so `scripts/init_db.py` does not block on an existing database. CI runs in `.github/workflows/ci.yml` (Python 3.10 and 3.12 on Ubuntu and macOS).
+
+To **regenerate `requirements.txt`**, constrain tight pins first (`numpy`, `protobuf`, `urllib3`), then e.g. `pip install --use-deprecated=legacy-resolver -r requirements.in` and `pip freeze`; re-add the header comment in `requirements.txt` after freezing.
+
+### Versioning and release channel
+
+1. Set **`__version__`** in **`src/bidshub_version.py`** and the **`version`** in **`pyproject.toml`** to the same value.
+2. Update **`ARG BIDSHUB_VERSION`** in the **`Dockerfile`** and the `${…:-x.y.z}` fallbacks in **`docker-compose.yml`** / **`docker-compose.image.yml`** when you cut a release (or rely on build args from `./hub-docker` / CI).
+3. Add a short note under **Recent changes** below; tag with **`git tag vX.Y.Z`** and **`git push origin vX.Y.Z`**.
+4. **Default distribution channel** is **git + tags** and optional **Docker images**, not PyPI—publishing a wheel would need a proper build backend and entry point in `pyproject.toml`.
+
+**Beta:** **XNAT** is beta; export to BIDS when in doubt.
+
+### Docker image (maintainers)
+
+```bash
+V="$(python3 scripts/print_bidshub_version.py)"
+docker build -t "bidshub:${V}" --build-arg "BIDSHUB_VERSION=${V}" .
+# Or: ./hub-docker install
+```
+
+Push to your registry, then document the image URL for users. Pre-pulled deploy: `export BIDSHUB_DOCKER_FILE=docker-compose.image.yml` and `export BIDSHUB_IMAGE=…`, then `./hub-docker pull && ./hub-docker start`.
+
+### Native production (summary)
+
+| Piece | Behavior |
+|-------|----------|
+| Code | Git checkout; use a **release tag** for a frozen baseline. |
+| Env | `venv/` from `./hub install`; deps from `requirements.txt`. |
+| Process | `streamlit run app.py` via `./hub start`; **localhost** on a free port in **8501–8501+50** (or `BIDSHUB_DEFAULT_PORT`). |
+| State | SQLite under `data/` |
+| Secrets | `.env` from `.env.example`; not in git |
+
+**Upgrades:** stop the app, `git pull` (or checkout tag), **`./hub install`**, **`./hub start`**—**back up `data/*.db` first**. **`./hub update`** runs `git pull` + pip; use only if your branch/remote matches your policy. **Remote access:** prefer **SSH port forwarding** to opening Streamlit on a public interface. Optional **systemd** can run Streamlit in the foreground from the venv with `EnvironmentFile=.env`.
+
+### Go-live checklist (lab / single user)
+
+- Pinned deps and CI green; version consistent in `bidshub_version.py` and `pyproject.toml`; secrets not committed.
+- Backup `data/*.db` before upgrades; verify the **sidebar version** after deploy.
+- Run one smoke path (e.g. open a local BIDS dataset).
+
+### Recent changes
+
+- **Unreleased:** `hub-docker` CLI; Docker image (uid 1000, healthcheck, compose pre-pull); port selection **8501+**; CI docker-smoke.
+- **3.1.1 (2026-04-22):** Pinned requirements, `pytest` + GitHub Actions; `subject_sessions` / scan QC init; `BIDSHUB_NONINTERACTIVE` for `init_db`; database API and test fixes.
+
+---
+
 ## Glossary
 
 **BIDS** - Brain Imaging Data Structure, standardized format for neuroimaging data
@@ -3579,4 +3258,4 @@ Throughout BIDSHub, you'll see color-coded status badges:
 
 **End of User Guide**
 
-For troubleshooting, see: `TROUBLESHOOTING.md`
+For troubleshooting, see **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**.

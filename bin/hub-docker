@@ -271,7 +271,7 @@ cmd_help() {
     echo "  BIDSHUB_HOST_PORT    Set to pin host port; else start picks a free port in range"
     echo "  BIDSHUB_DOCKER_PORT  For checks, usually derived from the running container"
     echo ""
-    echo "Data: ./data is mounted into the container. See ${CYAN}SECURITY.md${NC} for network notes."
+    echo "Data: ./data is mounted into the container. See ${CYAN}USER_GUIDE.md${NC} (Security, development, and releases) for network notes."
     echo ""
 }
 

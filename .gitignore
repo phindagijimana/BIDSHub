@@ -119,3 +119,10 @@ create_favicon.py
 test_db_load.py
 test_keyword_filters.py
 docs/PRODUCTION_ROADMAP.md
+
+# Legacy one-off doc files (content lives in USER_GUIDE.md; keep only locally)
+/CHANGELOG.md
+/CONTRIBUTING.md
+/RELEASING.md
+/SECURITY.md
+docs/*.md

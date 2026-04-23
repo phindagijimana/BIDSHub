@@ -19,12 +19,12 @@ Last Updated: April 2026
 
 ## Install, pip, and venv
 
-For a **full native production** walkthrough (checkout tag, `.env`, `./hub install` / `start`, upgrades), see [docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md).
+For a **full native production** walkthrough (checkout tag, `.env`, `./hub install` / `start`, upgrades), see **[USER_GUIDE — Security, development, and releases](USER_GUIDE.md#security-development-and-releases)** (native summary and go-live checklist).
 
 ### `resolution-too-deep` or long pip backtracking
 
 - Install from the **committed** `requirements.txt` (fully pinned), not a loose subset.
-- If you must regenerate, see [CONTRIBUTING.md](CONTRIBUTING.md): constrain `numpy` / `protobuf` / `urllib3` first, then `pip install --use-deprecated=legacy-resolver -r requirements.in` and `pip freeze` into a new `requirements.txt`.
+- If you must regenerate, see [USER_GUIDE](USER_GUIDE.md#security-development-and-releases) (“For developers: setup and tests”): constrain `numpy` / `protobuf` / `urllib3` first, then `pip install --use-deprecated=legacy-resolver -r requirements.in` and `pip freeze` into a new `requirements.txt`.
 
 ### Broken venv (wrong `pip` shebang after moving the repo)
 
@@ -40,7 +40,7 @@ For a **full native production** walkthrough (checkout tag, `.env`, `./hub insta
 - **Manual:** `docker compose build && docker compose up -d` (requires a host `.env` for `env_file` in compose; use `./hub-docker install` or `cp .env.example .env` first), then open the URL printed by start (default first try `http://localhost:8501`).
 - **Data** — the compose file mounts `./data` into the container; use a path you own and back up like any local DB. The image runs as **uid 1000**; on Linux, if the database cannot be created, run `chown -R 1000:1000 data` (or your OS-specific equivalent) on the host mount.
 - **Health** — the image’s healthcheck uses `http://127.0.0.1:8501/_stcore/health` (Streamlit). If the container is unhealthy, check `docker compose logs` and that dependencies installed during `docker build` completed without error.
-- **Network** — the process listens on `0.0.0.0` **inside** the container; do not publish the port on hosts reachable from untrusted networks without a firewall or reverse proxy. See [SECURITY.md](SECURITY.md).
+- **Network** — the process listens on `0.0.0.0` **inside** the container; do not publish the port on hosts reachable from untrusted networks without a firewall or reverse proxy. See [USER_GUIDE](USER_GUIDE.md#security-development-and-releases) (Credentials and network).
 - **XNAT** is **beta** in the product: export to BIDS and validate before relying on a containerized-only setup; see the XNAT sections below and the platform summary in [USER_GUIDE.md](USER_GUIDE.md#supported-platforms-summary).
 
 ---
