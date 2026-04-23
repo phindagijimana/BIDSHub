@@ -12,23 +12,35 @@
 | **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | Install, pip, venv, Docker, platform issues, and fixes |
 | **README.md** (this file) | Short intro and CLI only |
 
-## Quick start (CLI)
+## Quick start
+
+**Native (recommended):** Python on the host; one database under `./data` (not containerized in this path).
 
 ```bash
-git clone <repo-url> && cd BIDSHUB
+git clone https://github.com/phindagijimana/BIDSHub.git
+cd BIDSHUB
+./hub install    # venv, locked deps, .env from .env.example, init DB
+./hub start      # launch Streamlit (default http://localhost:8501 or next free 8501–8551)
+./hub stop       # stop the app
+./hub help       # all commands
 ```
 
-| | **Native** (Python on the host) | **Docker** (Compose v2; bash / WSL) |
-|---|--------------------------------|--------------------------------------|
-| **Install & run** | `./hub install && ./hub start` | `./hub-docker install && ./hub-docker start` |
-| **Help** | `./hub help` | `./hub-docker help` |
-| **Typical ops** | `./hub status` · `./hub logs` · `./hub stop` · `./hub restart` | `./hub-docker checks` · `./hub-docker logs` · `./hub-docker stop` · `./hub-docker restart` |
+**Docker (optional, Compose v2; bash / WSL):** builds/runs a single app container; host `./data` is mounted, volumes kept on `./hub-docker stop` by default.
 
-First run can create **`.env`** from **`.env.example`**. App URL: **`http://localhost:8501`** (or next free port in **8501–8551**; override with **`BIDSHUB_DEFAULT_PORT`** or **`BIDSHUB_HOST_PORT`** in `.env` for Docker).
+```bash
+git clone https://github.com/phindagijimana/BIDSHub.git
+cd BIDSHUB
+./hub-docker install   # .env, build or pull image
+./hub-docker start
+./hub-docker stop      # stop container; data volume on host is kept
+./hub-docker help
+```
+
+BIDSHub has **no** FreeSurfer / MELD “license” step (that belongs to other stacks such as *neuroinsight_research* with a `./research` CLI). For platform **API** keys, use **`.env`** after `./hub install` or the in-app settings.
+
+**Pre-built image:** set `BIDSHUB_DOCKER_FILE=docker-compose.image.yml` and `BIDSHUB_IMAGE=…` — [USER_GUIDE.md](USER_GUIDE.md#native-and-docker-cli).
 
 **Windows (native):** `bin\explorer.bat`.
-
-**Pre-built image:** `BIDSHUB_DOCKER_FILE=docker-compose.image.yml`, `BIDSHUB_IMAGE=…`, then `./hub-docker pull && ./hub-docker start` — see [USER_GUIDE.md](USER_GUIDE.md#native-and-docker-cli).
 
 **Secrets:** keep API keys in **`.env`** only (never commit).
 
