@@ -1,6 +1,6 @@
 # Native production deployment (`./hub`)
 
-**Recommended path** for BIDSHub in production: run from a **git checkout** on a workstation or small server, using the **`./hub` CLI** (symlink to `bin/explorer`). For a **single-container** deployment with a similar CLI, use **`./hub-docker`** (`install` / `start` / `stop` / `logs` / `checks`) — see the main [README.md](../README.md) Docker section. This page is for **Python venv + Streamlit** on the host.
+**Recommended path** for BIDSHub in production: run from a **git checkout** on a workstation or small server, using the **`./hub` CLI** (symlink to `bin/explorer`). For a **single-container** deployment with a similar CLI, use **`./hub-docker`** (`install` / `start` / `stop` / `logs` / `checks`) — see [README.md](../README.md#quick-start-cli) and the full [Native and Docker (CLI) section in the User Guide](../USER_GUIDE.md#native-and-docker-cli). This page is for **Python venv + Streamlit** on the host.
 
 ## What you get
 
@@ -12,7 +12,7 @@
 | App process | `streamlit run app.py` started by `./hub start` (listens on **localhost** on an available port from **8501** through **8501+50**, or set `BIDSHUB_DEFAULT_PORT`) |
 | State | SQLite under `data/`, usually `data/*.db` |
 | Env / secrets | `.env` (from `.env.example`); not committed to git |
-| Control | `./hub` commands (see [README.md](../README.md#cli-commands)) |
+| Control | `./hub` commands (see [README.md](../README.md#quick-start-cli) and [USER_GUIDE.md](../USER_GUIDE.md#native-and-docker-cli)) |
 
 ## First-time install (production)
 

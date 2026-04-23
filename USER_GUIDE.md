@@ -2,26 +2,147 @@
 
 **Complete guide to using BIDSHub for BIDS neuroimaging dataset management**
 
-Version: 2.0 
-Last Updated: February 5, 2026
+Version: 3.1.1  
+Last Updated: April 2026
 
 ---
 
 ## Table of Contents
 
-1. [Getting Started](#getting-started)
-2. [Platform Connections](#platform-connections)
-3. [Browsing Datasets & Subjects](#browsing-datasets--subjects)
-4. [MRI Viewer](#mri-viewer)
-5. [Download Manager](#download-manager)
-6. [Quality Control](#quality-control)
-7. [Managing Multiple Datasets](#managing-multiple-datasets)
-8. [Advanced Workflows](#advanced-workflows)
-9. [Troubleshooting](#troubleshooting)
+1. [Overview, BIDS, and installation](#overview-bids-and-installation)
+2. [Getting Started](#getting-started)
+3. [Platform Connections](#platform-connections)
+4. [Browsing Datasets & Subjects](#browsing-datasets--subjects)
+5. [MRI Viewer](#mri-viewer)
+6. [Download Manager](#download-manager)
+7. [Quality Control](#quality-control)
+8. [Managing Multiple Datasets](#managing-multiple-datasets)
+9. [Advanced Workflows](#advanced-workflows)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview, BIDS, and installation
+
+### What BIDSHub is
+
+BIDSHub is a **desktop application** that connects to multiple neuroimaging data platforms so you can browse and download **BIDS-formatted** data without building your own cloud stack. You can aggregate subjects from up to **20** datasets across platforms into one view.
+
+**Well suited for:** combining Pennsieve, OpenNeuro, DANDI, XNAT, and other supported sources; QC tracking; metadata filtering; downloads; MRI viewing; and longitudinal or multi-site cohorts.
+
+**Not designed for:** multi-user collaboration; general processing pipelines (use fMRIPrep, FreeSurfer, and similar); or turnkey public internet hosting without extra infrastructure.
+
+### BIDS format (required)
+
+**BIDSHub only accepts [BIDS](https://bids.neuroimaging.io/) datasets.** The app validates structure before a dataset is added; non-BIDS data is rejected with guidance.
+
+| Platform | BIDS status | What to do |
+|----------|-------------|------------|
+| **OpenNeuro** | BIDS | Ready to use |
+| **DANDI** | Mixed (NWB + BIDS) | Use MRI / BIDS datasets only |
+| **Pennsieve** | User-organized | Organize as BIDS before upload |
+| **XNAT** | Often DICOM archives | Export as BIDS (plugin or e.g. dcm2bids) |
+
+**Converting to BIDS:** DICOM → [dcm2bids](https://unfmontreal.github.io/Dcm2Bids/), [heudiconv](https://heudiconv.readthedocs.io/), or [BIDScoin](https://bidscoin.readthedocs.io/). Run [bids-validator](https://bids-standard.github.io/bids-validator/) before adding a dataset. Specification: [bids.neuroimaging.io](https://bids.neuroimaging.io/).
+
+### Supported platforms (summary)
+
+| Platform | Status | Notes |
+|----------|--------|--------|
+| **OpenNeuro** | Production | Public BIDS |
+| **Pennsieve** | Production | Private; must be BIDS on the platform |
+| **DANDI** | Production | Filter for BIDS MRI where applicable |
+| **XNAT** | Beta | Export as BIDS for best results |
+| **Local** | Production | BIDS on disk |
+| **HPC** / **Remote Server** (v3.1+) | Production | BIDS over SSH |
+
+See [Platform Connections](#platform-connections) for setup detail.
+
+### Features at a glance
+
+**Core:** BIDS validation; up to 7 platform types; subject browser (pagination, sessions); cross-platform filters; download manager; QC; built-in NIfTI viewer; transfers between some platforms; caching and batching.
+
+**Multi-dataset:** up to 20 BIDS datasets; cross-dataset subject view; per-dataset enable/disable; platform credentials in UI or env.
+
+**Tech stack:** Python, Streamlit, SQLite, PyBIDS, platform SDKs (Pennsieve, OpenNeuro, xnatpy, dandi, etc.).
+
+### System requirements
+
+- **Python 3.10+** (CI uses 3.10 and 3.12; 3.9 may work in places).
+- **OS:** macOS, Linux, **Windows** (native via `bin\explorer.bat` or WSL for `hub-docker` bash scripts).
+- **BIDS data** and, for cloud sources, **credentials** as required by each platform.
+- **Pennsieve:** native install can pull the agent via `./hub install` when needed.
+- **Version** is in `src/bidshub_version.py` and the app sidebar. Release process: [RELEASING.md](RELEASING.md), [CHANGELOG.md](CHANGELOG.md), [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md).
+
+**Native (recommended) production** setup: [docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md), [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### BIDS dataset layout (checklist)
+
+Your dataset should include at least:
+
+- `dataset_description.json` with `Name` and `BIDSVersion`
+- Subject folders `sub-<label>`
+- Modality folders (`anat`, `func`, `dwi`, `fmap`, …) with BIDS file names
+- **Recommended:** `participants.tsv` for demographics; `README` describing the study
+
+### Native and Docker (CLI)
+
+From a **git clone** of the repo at the project root:
+
+| | **Native** | **Docker** |
+|---|------------|------------|
+| **Install & run** | `./hub install && ./hub start` | `./hub-docker install && ./hub-docker start` |
+| **Help** | `./hub help` | `./hub-docker help` |
+| **Typical ops** | `status` · `logs` · `stop` · `restart` · `clean` | `checks` · `logs` · `stop` · `restart` · `pull`* |
+
+*\*`pull` is for **pre-built** images (`docker-compose.image.yml`), not the default build path.*
+
+- First run can create **`.env`** from **`.env.example`**. Edit **`.env`** for API keys and paths, or set credentials in the app.
+- URL defaults to **`http://localhost:8501`**, or the next free port in **8501–8551** (override with **`BIDSHUB_DEFAULT_PORT`**; for Docker host publish, **`BIDSHUB_HOST_PORT`** in `.env`).
+
+**Docker image:** single service; Streamlit; SQLite under `/app/data`; healthcheck; non-root uid **1000**; compose bind-mounts **host `./data` → `/app/data`**. On Linux, if SQLite errors on permissions: e.g. `chown -R 1000:1000 data`. Read [SECURITY.md](SECURITY.md) before exposing a port. Some platform-specific tools are **validated mainly on the native path**; use Docker only if your team has checked your workflow.
+
+**Pre-built / registry image** (no `docker build` on the target):
+
+```bash
+export BIDSHUB_DOCKER_FILE=docker-compose.image.yml
+export BIDSHUB_IMAGE=ghcr.io/YOUR_ORG/bidshub:3.1.1
+./hub-docker pull && ./hub-docker start
+```
+
+`BIDSHUB_DOCKER_FILE` selects build compose vs image-only compose. Go-live notes: [docs/PRODUCTION_GO_LIVE.md](docs/PRODUCTION_GO_LIVE.md). Registry workflow: [RELEASING.md](RELEASING.md).
+
+### Environment file (`.env`)
+
+Optional keys (see also [`.env.example`](.env.example)):
+
+```env
+BIDS_ROOT=/path/to/bids/dataset
+PENNSIEVE_API_KEY=your_key
+PENNSIEVE_API_SECRET=your_secret
+PENNSIEVE_DATASET_NAME=your_dataset
+```
+
+You can instead configure many options in the app after launch.
+
+### Security (local and Docker)
+
+- Keep **API secrets** in **`.env`** on your machine only; never commit real keys. Rotate keys in the provider UI if they leak.
+- **Native:** use **localhost** in normal use. **Docker** publishes a host port; use only on **trusted** networks. Do not put Streamlit on the public internet without a **reverse proxy, TLS, and authentication**.
+
+Full policy: [SECURITY.md](SECURITY.md).
+
+### First run (short)
+
+1. **Launch** the app (native or Docker as above). The database is created on first use; the UI can open **Manage Datasets**.
+2. **Sample datasets** (no credentials): see [Sample Datasets for Testing](#sample-datasets-for-testing), or run `python scripts/add_sample_datasets.py add`.
+3. **Your data:** add a **cloud** dataset (platform, ID, credentials) or **local** BIDS path from **Setup** / **Manage Datasets** — BIDS validation runs on add. Then **Sync** subjects as needed. Full UI walkthrough: [Getting Started](#getting-started) and [Platform Connections](#platform-connections).
 
 ---
 
 ## Getting Started
+
+**Install, Docker, ports, and `.env`:** [Overview, BIDS, and installation](#overview-bids-and-installation).
 
 ### Launch BIDSHub
 
@@ -2546,6 +2667,14 @@ Both have same subject IDs
 
 ## Troubleshooting
 
+### BIDS, ports, metadata, and local database (quick)
+
+- **BIDS validation failed:** run `bids-validator /path/to/dataset`; require `dataset_description.json` and `sub-*` layout; use [bids.neuroimaging.io](https://bids.neuroimaging.io/). DICOM must be converted first (e.g. [dcm2bids](https://unfmontreal.github.io/Dcm2Bids/)). See [Overview, BIDS, and installation](#overview-bids-and-installation) above.
+- **Missing metadata in filters:** ensure `participants.tsv` with `participant_id` and useful columns (`age`, `sex`, `diagnosis`, `group`, …) when you need filtering.
+- **Port in use or wrong port:** the launchers try **8501** then the next free port into **~8551**; set **`BIDSHUB_DEFAULT_PORT`** (or **`BIDSHUB_HOST_PORT`** for Docker) in the environment or `.env`.
+- **Cannot connect to a platform:** check credentials, network, and IDs (**case-sensitive**): Pennsieve dataset name must match; OpenNeuro uses `ds00…` form; DANDI uses 6-digit dandiset ids (e.g. `000001`).
+- **Local database / cache issues:** from the project root, `./hub clean` then `./hub install` (or equivalent for your install). Deeper help: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ### Connection Issues
 
 #### Problem: "Failed to connect to Pennsieve"
@@ -3318,9 +3447,9 @@ Recommended frequency:
 
 ### Documentation
 
-- **USER_GUIDE.md** - This complete user guide
+- **USER_GUIDE.md** - This complete user guide (product overview, BIDS, install, workflows)
 - **TROUBLESHOOTING.md** - Common issues and solutions
-- **README.md** - Quick start and installation
+- **README.md** - Short project intro, CLI table, and links
 
 ### Getting Help
 

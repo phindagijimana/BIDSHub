@@ -41,7 +41,7 @@ For a **full native production** walkthrough (checkout tag, `.env`, `./hub insta
 - **Data** — the compose file mounts `./data` into the container; use a path you own and back up like any local DB. The image runs as **uid 1000**; on Linux, if the database cannot be created, run `chown -R 1000:1000 data` (or your OS-specific equivalent) on the host mount.
 - **Health** — the image’s healthcheck uses `http://127.0.0.1:8501/_stcore/health` (Streamlit). If the container is unhealthy, check `docker compose logs` and that dependencies installed during `docker build` completed without error.
 - **Network** — the process listens on `0.0.0.0` **inside** the container; do not publish the port on hosts reachable from untrusted networks without a firewall or reverse proxy. See [SECURITY.md](SECURITY.md).
-- **XNAT** is **beta** in the product: export to BIDS and validate before relying on a containerized-only setup; see the XNAT sections below and the platform table in the README.
+- **XNAT** is **beta** in the product: export to BIDS and validate before relying on a containerized-only setup; see the XNAT sections below and the platform summary in [USER_GUIDE.md](USER_GUIDE.md#supported-platforms-summary).
 
 ---
 
