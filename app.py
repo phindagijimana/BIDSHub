@@ -32,6 +32,7 @@ from src.metadata_filter import MetadataFilter
 from src.agent_factory import AgentFactory, create_agent_factory
 from src.bids_utils import extract_bids_path, normalize_subject_id, normalize_session_id, detect_sessions_in_path
 from src.error_messages import ErrorMessages, handle_agent_error
+from src.bidshub_version import __version__
 from src.cache_manager import CacheManager
 from src.ui_calm import (
     DOWNLOAD_QUEUE_PLATFORMS,
@@ -1069,7 +1070,7 @@ def render_sidebar():
             st.rerun()
         
         st.markdown("---")
-        st.caption("BIDSHub v3.1.1")
+        st.caption(f"BIDSHub v{__version__}")
 
 
 def page_setup():

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BIDSHub Launch Script
-Automatically finds available port between 8500-8550 and launches Streamlit
+Finds an available port from 8501 through 8501+50 and launches Streamlit
 """
 
 import socket
@@ -10,10 +10,9 @@ import subprocess
 import os
 
 
-# Configuration
-MIN_PORT = 8500
-MAX_PORT = 8550
+# Configuration: try DEFAULT, then DEFAULT+1 .. DEFAULT+50
 DEFAULT_PORT = 8501
+MAX_PORT = DEFAULT_PORT + 50
 
 
 def is_port_available(port: int) -> bool:
@@ -26,19 +25,12 @@ def is_port_available(port: int) -> bool:
         return False
 
 
-def find_available_port(start_port: int = DEFAULT_PORT) -> int:
-    """Find an available port in the specified range."""
-    # Try default port first
-    if is_port_available(start_port):
-        return start_port
-    
-    # Try other ports in range
-    for port in range(MIN_PORT, MAX_PORT + 1):
-        if port == start_port:
-            continue  # Already tried
+def find_available_port(start_port: int = DEFAULT_PORT) -> int | None:
+    """Find an available port from start_port through start_port+50 (inclusive)."""
+    end = start_port + 50
+    for port in range(start_port, end + 1):
         if is_port_available(port):
             return port
-    
     return None
 
 
@@ -64,11 +56,11 @@ def main():
         sys.exit(1)
     
     # Find available port
-    print(f"\nSearching for available port in range {MIN_PORT}-{MAX_PORT}...")
+    print(f"\nSearching for available port in range {DEFAULT_PORT}-{MAX_PORT}...")
     port = find_available_port()
     
     if port is None:
-        print(f"\n[ERROR] No available ports in range {MIN_PORT}-{MAX_PORT}")
+        print(f"\n[ERROR] No available ports in range {DEFAULT_PORT}-{MAX_PORT}")
         print("  Please close some applications and try again")
         sys.exit(1)
     

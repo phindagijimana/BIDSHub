@@ -37,6 +37,7 @@ venv.bak/
 *.sqlite3
 data/*.db
 data/*.sqlite
+data/temp_viewer/
 
 # Streamlit
 .streamlit/secrets.toml

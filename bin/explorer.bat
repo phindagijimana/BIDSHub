@@ -64,7 +64,18 @@ echo [INFO] Installing dependencies...
 pip install -r requirements.txt --quiet
 echo [OK] Dependencies installed
 
+if exist ".env" (
+    echo [INFO] Using existing .env ^(not modified^)
+) else if exist ".env.example" (
+    echo [INFO] Creating .env from .env.example ^(optional: add API keys and paths^)...
+    copy /Y .env.example .env >nul
+    echo [OK] Created .env
+) else (
+    echo [WARN] .env.example not found; create .env yourself if needed
+)
+
 echo [INFO] Initializing database...
+set BIDSHUB_NONINTERACTIVE=1
 python scripts\init_db.py
 echo [OK] Database initialized
 
@@ -282,7 +293,7 @@ if exist ".env" (
     type .env | findstr /v "^#" | findstr /v "^$"
 ) else (
     echo [WARN] No .env file found
-    echo [INFO] Create from template: copy .env.example .env
+    echo [INFO] Run 'explorer.bat install' to create .env from .env.example, or: copy .env.example .env
 )
 goto end
 

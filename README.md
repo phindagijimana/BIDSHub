@@ -86,41 +86,62 @@ BIDSHub is a **desktop application** that connects to multiple neuroimaging data
 
 Python • Streamlit • SQLite • PyBIDS • Pennsieve • OpenNeuro • xnatpy • dandi • boto3
 
+## Supported environment
+
+- **Python:** 3.10+ (3.9 may work in places; **CI** uses 3.10 and 3.12 on Ubuntu and macOS)
+- **Install / production (native):** from this repository with **`./hub install`** and locked `requirements.txt` (see [docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md) and [CONTRIBUTING.md](CONTRIBUTING.md))
+- **OS:** macOS, Linux, Windows (via WSL or native; **`./hub`** is the supported launcher for production-style installs)
+
+**Version** is defined in [`src/bidshub_version.py`](src/bidshub_version.py) and [`pyproject.toml`](pyproject.toml) (bump both when releasing) and shown in the app sidebar. See [CHANGELOG.md](CHANGELOG.md) for release notes. Tag releases as e.g. `v3.1.1` to match that version. Release and distribution policy: [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md), [RELEASING.md](RELEASING.md).
+
+## Security (local use)
+
+- **Secrets:** use `.env` on your machine only; **never commit** real API keys. Copy from [`.env.example`](.env.example). If keys leak, rotate them in the provider’s UI (e.g. Pennsieve) immediately.
+- **Network:** the app is meant to bind to **localhost** for the native install. The optional **Docker** image listens on all interfaces inside the container; only publish a port on **trusted** networks. Do not expose Streamlit to the public internet without a reverse proxy, TLS, and authentication.
+
+Full policy: [SECURITY.md](SECURITY.md). Support checklist, logs, redaction: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ## Quick Start
 
-### Option 1: Native Python
 ```bash
-# Clone repository
-git clone https://github.com/phindagijimana/data_explorer.git
-cd data-explorer
+git clone <your-fork-or-upstream-url>
+cd BIDSHUB   # or your checkout directory name
 
-# Install (one command)
+# Install and launch (first run creates .env from .env.example if missing)
 ./hub install
-
-# Launch
+# Optional: edit .env for API keys / paths, or set them in the app
 ./hub start
 ```
 
-The browser opens automatically at `http://localhost:8501` (or next available port).
+The browser should open at `http://localhost:8501` (or the next free port). Use `./hub status` and `./hub logs` if something fails.
 
-### Option 2: Docker (Recommended)
+**Optional: Docker (single OCI image, lab / single user)** — the repo ships a production-style **`Dockerfile`** (Streamlit, SQLite under `/app/data`, healthcheck, non-root uid **1000**, OCI labels). The helper CLI mirrors **`./hub`** ergonomics.
+
+**Build from this repo (default tag `bidshub:3.1.1` from `docker-compose.yml`):**
+
 ```bash
-# Clone repository
-git clone https://github.com/phindagijimana/data_explorer.git
-cd data-explorer
-
-# Create .env file with your credentials
-cp .env.example .env
-# Edit .env with your Pennsieve credentials and BIDS path
-
-# Start
-docker-compose up -d
-
-# Access
-open http://localhost:8501
+./hub-docker install   # .env if needed + docker compose build
+./hub-docker start
+./hub-docker checks
+./hub-docker logs
+./hub-docker stop
+# http://localhost:8501 — see [SECURITY.md](SECURITY.md) before exposing a port
 ```
 
-**Benefits of Docker:** Zero configuration, reproducible environment, works everywhere.
+**Data on disk:** the compose file mounts **host `./data` → `/app/data`**. The app in the image runs as **uid 1000**. If SQLite reports permission errors on Linux, fix ownership on the host, e.g. `chown -R 1000:1000 data` (or adjust your volume strategy).
+
+**Pre-built / registry image** (no build on the target host; see [RELEASING.md](RELEASING.md) for `docker push`):
+
+```bash
+export BIDSHUB_DOCKER_FILE=docker-compose.image.yml
+export BIDSHUB_IMAGE=ghcr.io/YOUR_ORG/bidshub:3.1.1
+./hub-docker pull      # or ./hub-docker install  (same when using image compose file)
+./hub-docker start
+```
+
+`BIDSHUB_DOCKER_FILE` selects **`docker-compose.yml`** (build) vs **`docker-compose.image.yml`** (pull only). See `./hub-docker help`. Go-live: [docs/PRODUCTION_GO_LIVE.md](docs/PRODUCTION_GO_LIVE.md).
+
+**Production (recommended):** native venv + [`./hub`](docs/NATIVE_PRODUCTION.md) on the host; Docker is optional for lab/container workflows.
 
 ### First Run Workflow
 
@@ -162,6 +183,8 @@ Sample datasets available:
 
 ## CLI Commands
 
+**Native (venv on the host):**
+
 ```bash
 ./hub start # Launch BIDSHub
 ./hub stop # Stop BIDSHub
@@ -172,7 +195,9 @@ Sample datasets available:
 ./hub help # Show all commands
 ```
 
-**Cross-platform:** Same commands work on macOS, Linux, and Windows.
+**Docker (single `docker compose` service):** `./hub-docker help` — `install`, `pull`, `start`, `stop`, `restart`, `logs`, `checks`.
+
+**Cross-platform:** `./hub` works on macOS, Linux, and Windows (see `bin/explorer.bat`). `./hub-docker` requires Docker with Compose; use from a bash shell (macOS/Linux/WSL).
 
 ## Configuration
 
@@ -202,7 +227,7 @@ Or configure via UI on first launch.
 - BIDSHub works with sparse metadata but filtering requires populated fields
 
 **Port conflict?**
-- CLI automatically finds available port (8500-8550)
+- CLI automatically finds an available port from **8501** through **8501+50** (override base with `BIDSHUB_DEFAULT_PORT` for `./hub` / `hub-docker`)
 
 **Can't connect to platform?**
 - Verify credentials are correct (API key, secret, token)
@@ -229,21 +254,26 @@ Or configure via UI on first launch.
 
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Complete user documentation, platform connections, workflows
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions to common issues
+- **[SECURITY.md](SECURITY.md)** - Reporting issues, credentials, network exposure
+- **[docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md)** - Native production deployment with `./hub` (venv, upgrades, optional systemd)
+- **[docs/PRODUCTION_GO_LIVE.md](docs/PRODUCTION_GO_LIVE.md)** - Pre/post deploy checklist
+- **[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)** - Supported stack and release channel
+- **[RELEASING.md](RELEASING.md)** - Version bump and optional registry/PyPI notes
 - **[BIDS_EEG_PLAN.md](BIDS_EEG_PLAN.md)** - Future EEG/iEEG support plan
 
 ## Requirements
 
 ### Native Installation
-- Python 3.8+
+- **Python 3.10+** (CI uses 3.10 and 3.12; see [Supported environment](#supported-environment))
 - **BIDS-formatted dataset** (required for all platforms)
 - Platform credentials (varies by platform - see [Platform Integration Guide](PLATFORM_INTEGRATION_GUIDE.md))
 - Pennsieve Agent (auto-installed with `./hub install`, only needed for Pennsieve)
 
 ### Docker Installation
-- Docker Desktop (Mac/Windows) or Docker Engine (Linux)
-- **BIDS-formatted dataset** (required for all platforms)
-- Platform credentials (varies by platform)
-- **No Python or Pennsieve Agent needed** (bundled in container)
+- Docker Desktop (Mac/Windows) or Docker Engine (Linux) with Compose
+- **BIDS-formatted dataset** (required for all platforms) — mount or copy data as needed
+- Platform credentials (e.g. via `.env` per `docker-compose.yml` comments)
+- The image includes Python and pip dependencies. **Platform-specific tools** (e.g. some Pennsieve flows) are validated primarily on the **native** path; use Docker if your team has checked it for your workflow.
 
 ### BIDS Dataset Requirements
 Your dataset must include:

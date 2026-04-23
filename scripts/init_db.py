@@ -98,6 +98,11 @@ def init_database(db_path='data/bidshub.db'):
                 pennsieve_package_id TEXT,
                 qc_status TEXT DEFAULT 'pending',
                 qc_notes TEXT,
+                reviewed_by TEXT,
+                reviewed_date TIMESTAMP,
+                flagged BOOLEAN DEFAULT 0,
+                synced_to_platform BOOLEAN DEFAULT 0,
+                sync_date TIMESTAMP,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
                 FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
@@ -124,6 +129,29 @@ def init_database(db_path='data/bidshub.db'):
                 FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
                 CHECK (status IN ('queued', 'downloading', 'completed', 'failed', 'paused'))
             )
+        """)
+        
+        # subject_sessions (v3+ dynamic sessions; was migration-only, required for integrity checks)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subject_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id TEXT NOT NULL,
+                dataset_id INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                scan_count INTEGER DEFAULT 0,
+                acquisition_date TEXT,
+                created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE,
+                UNIQUE(subject_id, dataset_id, session_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subject_sessions_subject
+            ON subject_sessions(subject_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subject_sessions_dataset
+            ON subject_sessions(dataset_id)
         """)
         
         # Create qc_history table
@@ -236,7 +264,7 @@ def init_database(db_path='data/bidshub.db'):
         
         conn.commit()
         print(f"[OK] Database initialized successfully at: {db_path}")
-        print(f"[OK] Created tables: datasets, subjects, scans, download_queue, qc_history, metadata")
+        print(f"[OK] Created tables: datasets, subjects, scans, download_queue, subject_sessions, qc_history, metadata")
         
         # Get index count
         index_count = cursor.execute('SELECT COUNT(*) FROM sqlite_master WHERE type="index"').fetchone()[0]
@@ -304,6 +332,9 @@ if __name__ == "__main__":
     db_path = 'data/tracktbi.db'
     
     if os.path.exists(db_path):
+        if os.environ.get("BIDSHUB_NONINTERACTIVE", ""):
+            print(f"[OK] Database already exists at {db_path} (non-interactive, keeping file)")
+            exit(0)
         response = input(f"Database already exists at {db_path}. Recreate? (y/N): ")
         if response.lower() != 'y':
             print("Aborted.")

@@ -1,0 +1,23 @@
+# BIDSHub — single service (see ./hub-docker help).
+#   ./hub-docker install && ./hub-docker start
+#   Requires host .env (created by install/start from .env.example if missing); not committed to git.
+# Host port: BIDSHUB_HOST_PORT (default 8501); ./hub-docker picks 8501..8501+50 if unset and in use
+
+services:
+  bidshub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BIDSHUB_VERSION: ${BIDSHUB_VERSION:-3.1.1}
+    image: bidshub:${BIDSHUB_VERSION:-3.1.1}
+    container_name: bidshub
+    ports:
+      - "${BIDSHUB_HOST_PORT:-8501}:8501"
+    environment:
+      BIDSHUB_NONINTERACTIVE: "1"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

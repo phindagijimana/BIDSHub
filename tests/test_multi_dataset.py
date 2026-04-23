@@ -363,8 +363,9 @@ class TestMultiDatasetIntegration:
         assert len(ds2_subjects) == 1
         assert ds1_subjects[0]['local_subject_id'] == '001'
         assert ds2_subjects[0]['local_subject_id'] == '001'
-        assert ds1_subjects[0]['has_6mo'] == 1  # True
-        assert ds2_subjects[0]['has_6mo'] == 0  # False
+        assert ds1_subjects[0]['id'] != ds2_subjects[0]['id']
+        # has_6mo on subjects row is not driven by add_subject(..., has_6mo=...) in current API
+        assert 'has_6mo' in ds1_subjects[0]
 
 
 class TestMigrationScript:

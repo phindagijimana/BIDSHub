@@ -1,0 +1,20 @@
+# Project metadata (PEP 621). Runtime install: ./hub install  OR  pip install -r requirements.txt
+# Version is canonical in src/bidshub_version.py — bump both when releasing.
+# ``pip install .`` is not the primary path yet; this file anchors version for tools and future packaging.
+
+[project]
+name = "bidshub"
+version = "3.1.1"
+description = "Multi-platform BIDS dataset management and exploration for neuroimaging"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "BIDSHub maintainers" }]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.0",
+  "pytest-cov>=4.1.0",
+  "pytest-mock>=3.12.0",
+  "pip-tools>=7.0.0",
+]

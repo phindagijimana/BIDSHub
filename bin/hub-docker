@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+#
+# BIDSHub — single-container Docker helper (wraps docker compose)
+# Usage: ./hub-docker <command>
+#
+# Requires: Docker with Compose v2 (docker compose) or docker-compose
+#
+
+set -e
+
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    SCRIPT=$(readlink "$SCRIPT")
+done
+cd "$(dirname "$SCRIPT")/.."
+
+# Single source: src/bidshub_version.py (via scripts/print_bidshub_version.py)
+if [ -f "scripts/print_bidshub_version.py" ] && command -v python3 &>/dev/null; then
+    if _V="$(python3 scripts/print_bidshub_version.py 2>/dev/null)"; then
+        export BIDSHUB_VERSION="$_V"
+        : "${BIDSHUB_IMAGE:=bidshub:$_V}"
+        export BIDSHUB_IMAGE
+    fi
+fi
+
+# docker-compose.yml = build from source; docker-compose.image.yml = pull a registry / local tag
+: "${BIDSHUB_DOCKER_FILE:=docker-compose.yml}"
+export COMPOSE_FILE="${BIDSHUB_DOCKER_FILE}"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+SVC="bidshub"
+: "${BIDSHUB_DEFAULT_PORT:=8501}"
+HOST_PORT="${BIDSHUB_DOCKER_PORT:-$BIDSHUB_DEFAULT_PORT}"
+HEALTH_URL="http://127.0.0.1:${HOST_PORT}/_stcore/health"
+
+refresh_url_vars() {
+    HOST_PORT="${BIDSHUB_DOCKER_PORT:-$BIDSHUB_DEFAULT_PORT}"
+    HEALTH_URL="http://127.0.0.1:${HOST_PORT}/_stcore/health"
+}
+
+# Optional: BIDSHUB_DEFAULT_PORT / BIDSHUB_HOST_PORT in .env (compose also reads .env for interpolation)
+load_port_env_from_dotenv() {
+    [ -f .env ] || return 0
+    local _d _h
+    _d=$(grep -E '^[[:space:]]*BIDSHUB_DEFAULT_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r"'"'"'')
+    _h=$(grep -E '^[[:space:]]*BIDSHUB_HOST_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r"'"'"'')
+    if [ -n "$_d" ]; then export BIDSHUB_DEFAULT_PORT="$_d"; fi
+    if [ -n "$_h" ]; then export BIDSHUB_HOST_PORT="$_h"; fi
+}
+
+# First free host port in [BIDSHUB_DEFAULT_PORT, BIDSHUB_DEFAULT_PORT+50] (container always listens on 8501).
+pick_host_port_for_compose() {
+    if [ -n "${BIDSHUB_HOST_PORT:-}" ]; then
+        if command -v lsof &>/dev/null && lsof -i:"$BIDSHUB_HOST_PORT" >/dev/null 2>&1; then
+            print_err "BIDSHUB_HOST_PORT=$BIDSHUB_HOST_PORT is already in use"
+            exit 1
+        fi
+        export BIDSHUB_DOCKER_PORT="$BIDSHUB_HOST_PORT"
+        refresh_url_vars
+        return 0
+    fi
+    local d="$BIDSHUB_DEFAULT_PORT"
+    local max=$((d + 50))
+    if ! command -v lsof &>/dev/null; then
+        export BIDSHUB_HOST_PORT="$d"
+        export BIDSHUB_DOCKER_PORT="$d"
+        print_warn "lsof not found; using host port $d (set BIDSHUB_HOST_PORT if busy)"
+        refresh_url_vars
+        return 0
+    fi
+    local p
+    for p in $(seq "$d" "$max"); do
+        if ! lsof -i:"$p" >/dev/null 2>&1; then
+            export BIDSHUB_HOST_PORT="$p"
+            export BIDSHUB_DOCKER_PORT="$p"
+            refresh_url_vars
+            if [ "$p" -ne "$d" ]; then
+                print_info "Host port $d in use; published on $p (range ${d}-$((d + 50)))"
+            else
+                print_info "Host port $p -> container 8501"
+            fi
+            return 0
+        fi
+    done
+    print_err "No free host port in range ${d}-$((d + 50))"
+    exit 1
+}
+
+# Set HOST_PORT/HEALTH_URL for checks from running container if possible
+resolve_check_port() {
+    local out HP
+    if out=$(docker port "$SVC" 8501 2>/dev/null | head -1); then
+        HP="${out##*:}"
+        HP="${HP%$'\r'}"
+        export BIDSHUB_DOCKER_PORT="$HP"
+    fi
+    refresh_url_vars
+}
+
+print_err()  { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+print_ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
+print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
+header() {
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+}
+
+compose_bin() {
+    if docker compose version &>/dev/null; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
+ensure_docker() {
+    if ! command -v docker &>/dev/null; then
+        print_err "docker not found in PATH"
+        exit 1
+    fi
+}
+
+cmd_install() {
+    header "BIDSHub Docker — install (build image)"
+    ensure_docker
+    echo ""
+    if [ -f ".env" ]; then
+        print_info "Using existing .env (not modified)"
+    elif [ -f ".env.example" ]; then
+        print_info "Creating .env from .env.example (optional: API keys, paths)..."
+        cp .env.example .env
+        chmod 600 .env 2>/dev/null || true
+        print_ok "Created .env — edit before start if you need platform credentials in the container"
+    else
+        print_warn ".env.example missing; create .env yourself if the app needs custom variables"
+    fi
+    echo ""
+    if [ "$BIDSHUB_DOCKER_FILE" = "docker-compose.image.yml" ]; then
+        print_info "Using ${COMPOSE_FILE} — pulling image (no local build)..."
+        compose_bin pull
+        print_ok "Image pulled. Run: ./hub-docker start"
+    else
+        print_info "Building image (docker compose build) using ${COMPOSE_FILE}..."
+        compose_bin build
+        print_ok "Build complete. Run: ./hub-docker start"
+    fi
+    echo ""
+    print_info "After ./hub-docker start: app URL uses host port 8501 or next free in ${BIDSHUB_DEFAULT_PORT}-$((BIDSHUB_DEFAULT_PORT + 50)) (see start output)"
+}
+
+ensure_env_for_compose() {
+    if [ -f ".env" ]; then
+        return 0
+    fi
+    if [ -f ".env.example" ]; then
+        print_warn "No .env; creating from .env.example (compose env_file)..."
+        cp .env.example .env
+        chmod 600 .env 2>/dev/null || true
+        print_ok "Created .env"
+        return 0
+    fi
+    print_err "No .env and no .env.example. Run from the repo root or: ./hub-docker install"
+    exit 1
+}
+
+cmd_start() {
+    header "BIDSHub Docker — start"
+    ensure_docker
+    ensure_env_for_compose
+    load_port_env_from_dotenv
+    pick_host_port_for_compose
+    echo ""
+    compose_bin up -d
+    print_ok "Stack is up (detached)"
+    print_info "http://localhost:${HOST_PORT} — use ./hub-docker checks or ./hub-docker logs"
+}
+
+cmd_stop() {
+    header "BIDSHub Docker — stop"
+    ensure_docker
+    echo ""
+    compose_bin down
+    print_ok "Containers removed (data volume ./data is kept on the host)"
+}
+
+cmd_pull() {
+    header "BIDSHub Docker — pull image"
+    ensure_docker
+    echo ""
+    print_info "docker compose -f ${COMPOSE_FILE} pull"
+    compose_bin pull
+    print_ok "Done (use: ./hub-docker start)"
+}
+
+cmd_restart() {
+    header "BIDSHub Docker — restart"
+    ensure_docker
+    echo ""
+    resolve_check_port
+    compose_bin restart
+    print_ok "Restarted"
+    resolve_check_port
+    print_info "http://localhost:${HOST_PORT}"
+}
+
+cmd_logs() {
+    ensure_docker
+    if [ -n "$1" ]; then
+        compose_bin logs -f --tail=200 "$1"
+    else
+        compose_bin logs -f --tail=200 "$SVC"
+    fi
+}
+
+cmd_checks() {
+    header "BIDSHub Docker — checks"
+    ensure_docker
+    resolve_check_port
+    echo ""
+    print_info "docker compose ps"
+    compose_bin ps
+    echo ""
+    if command -v curl &>/dev/null; then
+        print_info "HTTP health (${HEALTH_URL})"
+        if curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL" 2>/dev/null; then
+            print_ok "Streamlit health endpoint responded"
+        else
+            print_warn "Health check failed or container still starting (Streamlit can take 60s+ on first run)"
+            print_info "Try: ./hub-docker logs   or   curl -v ${HEALTH_URL}"
+        fi
+    else
+        print_warn "curl not installed; skipping HTTP check. Install curl or use: ./hub-docker logs"
+    fi
+    echo ""
+    if docker inspect "$SVC" &>/dev/null; then
+        h=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no healthcheck{{end}}' "$SVC" 2>/dev/null || echo "unknown")
+        print_info "Container health (Dockerfile HEALTHCHECK): $h"
+    else
+        print_info "Container name ${SVC} not found (not running?)"
+    fi
+    echo ""
+}
+
+cmd_help() {
+    header "BIDSHub Docker CLI"
+    echo ""
+    echo "One-container deployment via docker compose. Compose file:"
+    echo "  ${COMPOSE_FILE}  (override with BIDSHUB_DOCKER_FILE=...)"
+    echo ""
+    echo "  ${GREEN}install${NC}   Create .env if needed; then build (or pull if BIDSHUB_DOCKER_FILE=docker-compose.image.yml)"
+    echo "  ${GREEN}pull${NC}      docker compose pull (registry / tagged image)"
+    echo "  ${GREEN}start${NC}     docker compose up -d"
+    echo "  ${GREEN}stop${NC}      docker compose down"
+    echo "  ${GREEN}restart${NC}   docker compose restart"
+    echo "  ${GREEN}logs${NC}      Follow service logs (default: ${SVC})"
+    echo "  ${GREEN}checks${NC}     ps + HTTP health + container health status"
+    echo "  ${GREEN}help${NC}      This message"
+    echo ""
+    echo "Environment:"
+    echo "  BIDSHUB_DOCKER_FILE  docker-compose.yml (build) or docker-compose.image.yml (pre-built image)"
+    echo "  BIDSHUB_IMAGE        image ref when using docker-compose.image.yml (default: bidshub:3.1.1)"
+    echo "  BIDSHUB_DEFAULT_PORT First host port to try (default 8501; scans +50 if busy)"
+    echo "  BIDSHUB_HOST_PORT    Set to pin host port; else start picks a free port in range"
+    echo "  BIDSHUB_DOCKER_PORT  For checks, usually derived from the running container"
+    echo ""
+    echo "Data: ./data is mounted into the container. See ${CYAN}SECURITY.md${NC} for network notes."
+    echo ""
+}
+
+main() {
+    case "${1:-}" in
+        install)  cmd_install ;;
+        pull)     cmd_pull ;;
+        start)    cmd_start ;;
+        stop)     cmd_stop ;;
+        restart)  cmd_restart ;;
+        logs)     shift; cmd_logs "$@" ;;
+        checks)   cmd_checks ;;
+        help|--help|-h|"")
+            cmd_help
+            exit 0
+            ;;
+        *)
+            print_err "Unknown command: $1"
+            echo ""
+            cmd_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

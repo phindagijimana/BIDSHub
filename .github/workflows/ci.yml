@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        env:
+          BIDSHUB_NONINTERACTIVE: "1"
+        run: |
+          python -m pip install -U pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Pytest
+        env:
+          BIDSHUB_NONINTERACTIVE: "1"
+        run: |
+          python -m pytest tests/ -q --tb=short
+
+  # Phase 5: image builds and a minimal run smoke (Linux only; large image)
+  docker-smoke:
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: BIDSHub version (for image labels)
+        id: bhver
+        run: |
+          v="$(python3 scripts/print_bidshub_version.py)"
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+          echo "BIDSHub version for Docker: ${v}"
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: bidshub:ci
+          build-args: |
+            BIDSHUB_VERSION=${{ steps.bhver.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke (Streamlit listen + HTTP)
+        run: |
+          set -e
+          docker run -d --name bhsmoke -p 19876:8501 bidshub:ci
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:19876/_stcore/health 2>/dev/null; then ok=1; break; fi
+            if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:19876/ 2>/dev/null; then ok=1; break; fi
+            sleep 3
+          done
+          if [ "$ok" != 1 ]; then
+            echo "--- container logs ---"
+            docker logs bhsmoke
+            exit 1
+          fi
+          echo "smoke ok"
+          docker stop bhsmoke

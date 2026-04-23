@@ -1,16 +1,14 @@
 @echo off
 REM BIDSHub Launch Script for Windows
-REM Automatically finds available port between 8500-8550
+REM Port search: DEFAULT (8501) through DEFAULT+50 (8551)
 
 REM Change to project root directory (parent of bin\)
 cd /d "%~dp0\.."
 
 setlocal enabledelayedexpansion
 
-REM Port range
-set MIN_PORT=8500
-set MAX_PORT=8550
 set DEFAULT_PORT=8501
+set MAX_PORT=8551
 
 echo ============================================================
 echo            BIDSHub Launch Script
@@ -37,29 +35,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Find available port
-echo Searching for available port (trying %DEFAULT_PORT% first)...
+REM Find available port (DEFAULT..MAX)
+echo Searching for available port in range %DEFAULT_PORT%-%MAX_PORT%...
 
-REM Try default port first
 set PORT=
-netstat -an | find "LISTENING" | find ":%DEFAULT_PORT% " >nul
-if errorlevel 1 (
-    set PORT=%DEFAULT_PORT%
-    goto :found_port
-)
-
-REM Try other ports in range
-for /l %%p in (%MIN_PORT%,1,%MAX_PORT%) do (
-    if not %%p==%DEFAULT_PORT% (
-        netstat -an | find "LISTENING" | find ":%%p " >nul
-        if errorlevel 1 (
-            set PORT=%%p
-            goto :found_port
-        )
+for /l %%p in (%DEFAULT_PORT%,1,%MAX_PORT%) do (
+    netstat -an | find "LISTENING" | find ":%%p " >nul
+    if errorlevel 1 (
+        set PORT=%%p
+        goto :found_port
     )
 )
 
-echo [ERROR] No available ports in range %MIN_PORT%-%MAX_PORT%
+echo [ERROR] No available ports in range %DEFAULT_PORT%-%MAX_PORT%
 echo Please close some applications and try again
 exit /b 1
 

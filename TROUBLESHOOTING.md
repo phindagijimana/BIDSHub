@@ -2,7 +2,54 @@
 
 Quick solutions to common issues in BIDSHub.
 
-Last Updated: February 2026
+Last Updated: April 2026
+
+---
+
+## Before you report an issue
+
+1. **Version and environment:** what does the sidebar show (e.g. BIDSHub v3.1.1), OS, and Python `python3 --version`?
+2. **Logs:** when `./hub` fails, capture `./hub logs` (or the latest file under `logs/` if present) **after removing** API keys, tokens, and paths you do not want to share.
+3. **Repro steps:** e.g. “Add Pennsieve dataset X → Sync → error message”.
+4. **Non-interactive install/CI:** `BIDSHUB_NONINTERACTIVE=1` is set by `./hub install` so `init_db` does not block on an existing database; use the same in scripts if needed.
+
+**Where logs live:** the `./hub` helper may tail Streamlit logs; project-level logs are often under `logs/` in the repository root. Do not upload `.env` or full credentials in bug reports.
+
+---
+
+## Install, pip, and venv
+
+For a **full native production** walkthrough (checkout tag, `.env`, `./hub install` / `start`, upgrades), see [docs/NATIVE_PRODUCTION.md](docs/NATIVE_PRODUCTION.md).
+
+### `resolution-too-deep` or long pip backtracking
+
+- Install from the **committed** `requirements.txt` (fully pinned), not a loose subset.
+- If you must regenerate, see [CONTRIBUTING.md](CONTRIBUTING.md): constrain `numpy` / `protobuf` / `urllib3` first, then `pip install --use-deprecated=legacy-resolver -r requirements.in` and `pip freeze` into a new `requirements.txt`.
+
+### Broken venv (wrong `pip` shebang after moving the repo)
+
+- Remove the `venv` folder and run `./hub install` again (creates a fresh venv for this path).
+
+### `ModuleNotFoundError` after a partial install
+
+- `pip install -r requirements.txt` and, for **tests** / `./hub test`, `pip install -r requirements-dev.txt`.
+
+### Docker (optional)
+
+- **Helper CLI (recommended):** from the repo root, `./hub-docker help` — commands `install`, `start`, `stop`, `restart`, `logs`, `checks`. **`./hub-docker start`** picks a free **host** port from **8501** through **8501+50** (override base with `BIDSHUB_DEFAULT_PORT` in the environment or `.env`; pin with `BIDSHUB_HOST_PORT`). **`checks`** reads the published port from `docker port` when possible.
+- **Manual:** `docker compose build && docker compose up -d` (requires a host `.env` for `env_file` in compose; use `./hub-docker install` or `cp .env.example .env` first), then open the URL printed by start (default first try `http://localhost:8501`).
+- **Data** — the compose file mounts `./data` into the container; use a path you own and back up like any local DB. The image runs as **uid 1000**; on Linux, if the database cannot be created, run `chown -R 1000:1000 data` (or your OS-specific equivalent) on the host mount.
+- **Health** — the image’s healthcheck uses `http://127.0.0.1:8501/_stcore/health` (Streamlit). If the container is unhealthy, check `docker compose logs` and that dependencies installed during `docker build` completed without error.
+- **Network** — the process listens on `0.0.0.0` **inside** the container; do not publish the port on hosts reachable from untrusted networks without a firewall or reverse proxy. See [SECURITY.md](SECURITY.md).
+- **XNAT** is **beta** in the product: export to BIDS and validate before relying on a containerized-only setup; see the XNAT sections below and the platform table in the README.
+
+---
+
+## Security and networking (local app)
+
+- **Localhost by default** — BIDSHub is a single-user desktop app. Exposing the Streamlit default port to `0.0.0.0` or a public host without a reverse proxy and auth is not supported and is unsafe.
+- **Credentials** — keep Pennsieve (and any other) keys in `.env` or the OS keychain; never commit them. Rotate on GitHub/Slack if they leak.
+- **Database** — `data/*.db` may contain your workflow metadata; back up and limit sharing like any local file.
 
 ---
 
@@ -720,7 +767,7 @@ pip install -r requirements.txt
 
 **Solution**:
 ```bash
-# CLI handles this automatically (finds free port 8500-8550)
+# CLI handles this automatically (default 8501, then up to +50)
 ./hub start
 
 # Manual override to specific port

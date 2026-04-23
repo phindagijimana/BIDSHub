@@ -254,7 +254,7 @@ def test_database_local_dataset_operations():
                     scan_count += 1
         
         # Verify scans
-        scans = db.get_scans_by_subject(subjects[0]['id'])
+        scans = db.get_scans_by_subject(subjects[0]['subject_id'])
         scans_added = len(scans) >= 4  # At least 4 scans per subject
         results.add("Add scans marked as downloaded", scans_added, f"Added {scan_count} scans, retrieved {len(scans)}")
         print(f"  {'[OK]' if scans_added else '[X]'} Added {scan_count} scans, {len(scans)} retrieved for first subject")
@@ -349,8 +349,8 @@ def test_local_auto_indexing():
             
             # Test 3.3: Verify scans marked as downloaded
             print("\n3.3: Verifying scans marked as downloaded...")
-            first_subject_id = subjects_in_db[0]['id']
-            scans = db.get_scans_by_subject(first_subject_id)
+            first_sid = subjects_in_db[0]['subject_id']
+            scans = db.get_scans_by_subject(first_sid)
             all_downloaded = all(scan['is_downloaded'] == 1 for scan in scans)
             results.add("Scans marked as downloaded", all_downloaded, f"Checked {len(scans)} scans")
             print(f"  {'[OK]' if all_downloaded else '[X]'} All {len(scans)} scans marked as downloaded")
@@ -476,7 +476,10 @@ def test_mixed_datasets():
         # Test 5.5: Optional credentials for local dataset
         print("\n5.5: Verifying optional credentials for local...")
         local_dataset = db.get_dataset(local_id)
-        creds_optional = local_dataset['api_key'] is None and local_dataset['api_secret'] is None
+        creds_optional = (
+            local_dataset.get('api_key_encrypted') is None
+            and local_dataset.get('api_secret_encrypted') is None
+        )
         results.add("Local dataset without credentials", creds_optional)
         print(f"  {'[OK]' if creds_optional else '[X]'} Local dataset allows null credentials: {creds_optional}")
     

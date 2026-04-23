@@ -1,0 +1,24 @@
+# Keep image small; do not copy secrets or local cruft
+.git
+.github
+venv
+.venv
+env
+__pycache__
+*.py[cod]
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+.env
+.env.*
+tests/
+.cursor
+.explorer.pid
+.explorer.port
+*.log
+# Local data directory contents (use a volume in compose; image keeps empty `data/`)
+data/*
+data/temp_*

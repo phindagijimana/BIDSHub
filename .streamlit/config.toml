@@ -1,5 +1,5 @@
 [server]
-# Port configuration - will use ports in range 8500-8550
+# Default port; ./hub may use 8501..8501+50 if busy
 port = 8501
 headless = false
 runOnSave = false

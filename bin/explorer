@@ -82,14 +82,26 @@ cmd_install() {
     pip install --upgrade pip --quiet
     print_success "pip upgraded"
     
-    # Install dependencies
+    # Install dependencies (fully pinned; see requirements.in for top-level deps)
     print_info "Installing dependencies..."
     pip install -r requirements.txt --quiet
     print_success "Dependencies installed"
     
-    # Initialize database
+    # One-time .env from template (never overwrite: user may already have secrets)
+    if [ -f ".env" ]; then
+        print_info "Using existing .env (not modified)"
+    elif [ -f ".env.example" ]; then
+        print_info "Creating .env from .env.example (optional: add API keys and paths)..."
+        cp .env.example .env
+        chmod 600 .env 2>/dev/null || true
+        print_success "Created .env — edit for Pennsieve/cloud paths or set them in the app later"
+    else
+        print_warning ".env.example not found; create .env yourself if the app needs custom paths or API keys"
+    fi
+    
+    # Initialize database (keep existing DB when re-running install)
     print_info "Initializing database..."
-    python scripts/init_db.py
+    BIDSHUB_NONINTERACTIVE=1 python scripts/init_db.py
     print_success "Database initialized"
     
     # Create logs directory
@@ -97,31 +109,22 @@ cmd_install() {
     
     echo ""
     print_success "Installation complete!"
-    print_info "Run './explorer start' to launch the application"
+    print_info "Run './hub start' to launch the application"
 }
 
-# Helper: Find available port
+# Helper: Find an available port from BIDSHUB_DEFAULT_PORT (default 8501) through that + 50 inclusive.
 find_available_port() {
-    local start_port=8501
-    
-    # Try default port first
-    if ! lsof -i:$start_port > /dev/null 2>&1; then
-        echo $start_port
-        return
-    fi
-    
-    # Try other ports
-    for port in {8500..8550}; do
-        if [ $port -eq $start_port ]; then
-            continue
-        fi
-        if ! lsof -i:$port > /dev/null 2>&1; then
-            echo $port
-            return
+    local d="${BIDSHUB_DEFAULT_PORT:-8501}"
+    local max=$((d + 50))
+    local port
+    for port in $(seq "$d" "$max"); do
+        if ! lsof -i:"$port" > /dev/null 2>&1; then
+            echo "$port"
+            return 0
         fi
     done
-    
     echo ""
+    return 1
 }
 
 # Command: start
@@ -157,7 +160,8 @@ cmd_start() {
     print_info "Finding available port..."
     PORT=$(find_available_port)
     if [ -z "$PORT" ]; then
-        print_error "No available ports in range 8500-8550"
+        local d="${BIDSHUB_DEFAULT_PORT:-8501}"
+        print_error "No available ports in range ${d}-$((d + 50))"
         exit 1
     fi
     
@@ -328,7 +332,7 @@ cmd_logs() {
         fi
     else
         print_warning "Streamlit logs directory not found"
-        print_info "Start the application first: ./explorer start"
+        print_info "Start the application first: ./hub start"
     fi
 }
 
@@ -363,7 +367,7 @@ cmd_update() {
     
     echo ""
     print_success "Update complete!"
-    print_info "Run './explorer restart' to apply changes"
+    print_info "Run './hub restart' to apply changes"
 }
 
 # Command: test
@@ -378,23 +382,20 @@ cmd_test() {
     
     source $VENV_DIR/bin/activate
     
-    # Run Python tests
-    print_info "Running unit tests..."
+    # Dev deps (pytest) — optional; CI installs from requirements-dev.txt
+    if [ -f "requirements-dev.txt" ]; then
+        print_info "Installing test dependencies..."
+        pip install -q -r requirements-dev.txt
+    fi
     
-    # Test database
-    print_info "Testing database..."
-    python scripts/init_db.py > /dev/null 2>&1
-    print_success "Database: OK"
-    
-    # Test imports
-    print_info "Testing imports..."
-    python -c "import streamlit; import bids; import pennsieve; import pandas; import plotly" 2>/dev/null
-    print_success "Dependencies: OK"
-    
-    # Test modules
-    print_info "Testing modules..."
-    python -c "from src import database, bids_loader, pennsieve_client, theme, utils" 2>/dev/null
-    print_success "Modules: OK"
+    print_info "Running pytest..."
+    BIDSHUB_NONINTERACTIVE=1 python -m pytest tests/ -q --tb=short
+    test_exit=$?
+    if [ "$test_exit" -ne 0 ]; then
+        print_error "Pytest failed (exit $test_exit)"
+        exit "$test_exit"
+    fi
+    print_success "Pytest: OK"
     
     echo ""
     print_success "All tests passed!"
@@ -456,7 +457,7 @@ cmd_clean() {
     
     echo ""
     print_success "Cleanup complete!"
-    print_info "Run './explorer install' to reinstall"
+    print_info "Run './hub install' to reinstall"
 }
 
 # Command: config
@@ -469,8 +470,7 @@ cmd_config() {
         echo ""
         cat .env | grep -v "^#" | grep -v "^$"
     else
-        print_warning "No .env file found"
-        print_info "Create from template: cp .env.example .env"
+        print_warning "No .env file found (run './hub install' to create from .env.example, or: cp .env.example .env)"
     fi
 }
 

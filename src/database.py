@@ -3,6 +3,11 @@ Database operations for BIDSHub.
 
 Provides a clean interface for all database operations including
 subjects, scans, download queue, and QC management.
+
+**SQL and parameters:** this module uses the standard ``sqlite3`` API with
+placeholders, e.g. ``cursor.execute(query, (value,))`` where ``query`` is a
+string containing ``?`` tokens—**never** building SQL with string concatenation
+of untrusted input.
 """
 
 import sqlite3
@@ -721,23 +726,23 @@ class Database:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            # Build query with optional dataset filter
-            query = """
+            fr = self._scans_fk_subquery()
+            query = f"""
                 SELECT 
                     COUNT(*) as total_scans,
-                    SUM(CASE WHEN qc_status != 'pending' THEN 1 ELSE 0 END) as reviewed,
-                    SUM(CASE WHEN qc_status = 'pending' THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN qc_status = 'pass' THEN 1 ELSE 0 END) as pass,
-                    SUM(CASE WHEN qc_status = 'fail' THEN 1 ELSE 0 END) as fail,
-                    SUM(CASE WHEN qc_status = 'needs_review' THEN 1 ELSE 0 END) as needs_review,
-                    SUM(CASE WHEN flagged = 1 THEN 1 ELSE 0 END) as flagged
-                FROM scans
-                WHERE subject_id = ?
+                    SUM(CASE WHEN s.qc_status != 'pending' THEN 1 ELSE 0 END) as reviewed,
+                    SUM(CASE WHEN s.qc_status = 'pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN s.qc_status = 'pass' THEN 1 ELSE 0 END) as pass,
+                    SUM(CASE WHEN s.qc_status = 'fail' THEN 1 ELSE 0 END) as fail,
+                    SUM(CASE WHEN s.qc_status = 'needs_review' THEN 1 ELSE 0 END) as needs_review,
+                    SUM(CASE WHEN s.flagged = 1 THEN 1 ELSE 0 END) as flagged
+                FROM scans s
+                WHERE {fr}
             """
             params = [subject_id]
             
             if dataset_id is not None:
-                query += " AND dataset_id = ?"
+                query += " AND s.dataset_id = ?"
                 params.append(dataset_id)
             
             cursor.execute(query, params)
@@ -843,6 +848,11 @@ class Database:
     
     # ===== Scan Operations =====
     
+    @staticmethod
+    def _scans_fk_subquery() -> str:
+        """scans.subject_id stores subjects.id as text; join via BIDS subject_id string."""
+        return "s.subject_id IN (SELECT CAST(id AS TEXT) FROM subjects WHERE subject_id = ?)"
+    
     def add_scan(self, subject_id: str, session: str, modality: str,
                 file_path: str, suffix: str = None, file_size_bytes: int = 0,
                 pennsieve_package_id: str = None, dataset_id: int = None,
@@ -851,29 +861,44 @@ class Database:
         Add a scan to the database.
         
         Args:
-            subject_id: Subject identifier
+            subject_id: BIDS subject identifier (e.g. sub-01)
             session: Session name (e.g., 'ses-01', 'ses-02')
             modality: Modality (e.g., 'anat', 'func', 'dwi')
             file_path: Path to scan file
             suffix: Scan suffix (e.g., 'T1w', 'bold')
             file_size_bytes: File size in bytes
             pennsieve_package_id: Pennsieve package ID
-            dataset_id: Dataset ID (v1.5+)
+            dataset_id: Dataset ID (required; used to resolve subjects.id FK in scans)
             is_downloaded: Whether scan is already downloaded (v1.5+)
             
         Returns:
             int: Scan ID if successful, None otherwise
         """
+        if dataset_id is None:
+            print("Error adding scan: dataset_id is required")
+            return None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM subjects WHERE subject_id = ? AND dataset_id = ?
+                """,
+                (subject_id, dataset_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                print(f"Error adding scan: no subject {subject_id} in dataset {dataset_id}")
+                return None
+            sub_pk = row[0]
+            fk = str(int(sub_pk))
             
             cursor.execute("""
                 INSERT INTO scans 
                 (dataset_id, subject_id, session, modality, suffix, file_path, 
                  file_size_bytes, is_downloaded, pennsieve_package_id, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (dataset_id, subject_id, session, modality, suffix, file_path,
+            """, (dataset_id, fk, session, modality, suffix, file_path,
                  file_size_bytes, 1 if is_downloaded else 0, pennsieve_package_id, datetime.now()))
             
             scan_id = cursor.lastrowid
@@ -901,19 +926,25 @@ class Database:
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
-            
+            fr = self._scans_fk_subquery()
             if session:
-                cursor.execute("""
-                    SELECT * FROM scans 
-                    WHERE subject_id = ? AND session = ?
-                    ORDER BY modality, suffix
-                """, (subject_id, session))
+                cursor.execute(
+                    f"""
+                    SELECT s.* FROM scans s
+                    WHERE {fr} AND s.session = ?
+                    ORDER BY s.modality, s.suffix
+                    """,
+                    (subject_id, session),
+                )
             else:
-                cursor.execute("""
-                    SELECT * FROM scans 
-                    WHERE subject_id = ?
-                    ORDER BY session, modality, suffix
-                """, (subject_id,))
+                cursor.execute(
+                    f"""
+                    SELECT s.* FROM scans s
+                    WHERE {fr}
+                    ORDER BY s.session, s.modality, s.suffix
+                    """,
+                    (subject_id,),
+                )
             
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -922,6 +953,73 @@ class Database:
             print(f"Error getting scans for {subject_id}: {e}")
             return []
             
+        finally:
+            conn.close()
+    
+    def get_scans_by_subject(
+        self, subject_id, dataset_id: Optional[int] = None
+    ) -> List[Dict]:
+        """
+        List scans for a subject (BIDS `subject_id` or internal `subjects.id` as int).
+        
+        When ``dataset_id`` is set, only scans in that dataset (mirrors app transfer code).
+        """
+        bids: Optional[str] = None
+        if isinstance(subject_id, int):
+            try:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                if dataset_id is not None:
+                    cursor.execute(
+                        """
+                        SELECT subject_id FROM subjects
+                        WHERE id = ? AND dataset_id = ?
+                        """,
+                        (subject_id, dataset_id),
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT subject_id FROM subjects WHERE id = ?",
+                        (subject_id,),
+                    )
+                row = cursor.fetchone()
+                bids = row[0] if row else None
+            except sqlite3.Error as e:
+                print(f"Error resolving subject id {subject_id}: {e}")
+                return []
+            finally:
+                conn.close()
+            if not bids:
+                return []
+        else:
+            bids = str(subject_id)
+        
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            fr = self._scans_fk_subquery()
+            if dataset_id is not None:
+                cursor.execute(
+                    f"""
+                    SELECT s.* FROM scans s
+                    WHERE {fr} AND s.dataset_id = ?
+                    ORDER BY s.session, s.modality, s.suffix
+                    """,
+                    (bids, dataset_id),
+                )
+            else:
+                cursor.execute(
+                    f"""
+                    SELECT s.* FROM scans s
+                    WHERE {fr}
+                    ORDER BY s.session, s.modality, s.suffix
+                    """,
+                    (bids,),
+                )
+            return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Error get_scans_by_subject: {e}")
+            return []
         finally:
             conn.close()
     
@@ -1540,10 +1638,14 @@ class Database:
             """)
             issues['orphaned_subjects'] = cursor.fetchone()[0]
             
-            # Orphaned scans (subject doesn't exist)
+            # Orphaned scans: scans.subject_id is FK to subjects.id (legacy rows may use BIDS)
             cursor.execute("""
-                SELECT COUNT(*) FROM scans 
-                WHERE subject_id NOT IN (SELECT subject_id FROM subjects)
+                SELECT COUNT(*) FROM scans s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM subjects sub
+                    WHERE sub.id = CAST(s.subject_id AS INTEGER)
+                       OR (sub.subject_id = s.subject_id AND sub.dataset_id = s.dataset_id)
+                )
             """)
             issues['orphaned_scans'] = cursor.fetchone()[0]
             
@@ -1619,10 +1721,17 @@ class Database:
                 """)
                 deleted['queue_items'] = cursor.rowcount
                 
-                # Delete orphaned scans
+                # Delete orphaned scans (scans.subject_id = subjects.id as text, or legacy BIDS)
                 cursor.execute("""
-                    DELETE FROM scans 
-                    WHERE subject_id NOT IN (SELECT subject_id FROM subjects)
+                    DELETE FROM scans
+                    WHERE id IN (
+                        SELECT s.id FROM scans s
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM subjects sub
+                            WHERE sub.id = CAST(s.subject_id AS INTEGER)
+                               OR (sub.subject_id = s.subject_id AND sub.dataset_id = s.dataset_id)
+                        )
+                    )
                 """)
                 deleted['scans'] = cursor.rowcount
                 
@@ -1650,8 +1759,12 @@ class Database:
                 deleted['queue_items'] = cursor.fetchone()[0]
                 
                 cursor.execute("""
-                    SELECT COUNT(*) FROM scans 
-                    WHERE subject_id NOT IN (SELECT subject_id FROM subjects)
+                    SELECT COUNT(*) FROM scans s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM subjects sub
+                        WHERE sub.id = CAST(s.subject_id AS INTEGER)
+                           OR (sub.subject_id = s.subject_id AND sub.dataset_id = s.dataset_id)
+                    )
                 """)
                 deleted['scans'] = cursor.fetchone()[0]
                 
@@ -1822,16 +1935,20 @@ class Database:
         finally:
             conn.close()
     
-    def run_integrity_maintenance(self, auto_fix: bool = False) -> Dict[str, any]:
+    def run_integrity_maintenance(
+        self, auto_fix: bool = False, dry_run: Optional[bool] = None
+    ) -> Dict[str, any]:
         """
         Run comprehensive integrity check and optionally auto-fix issues.
         
         Args:
-            auto_fix: If True, automatically fix issues (default: False)
-            
-        Returns:
-            dict: Report of issues found and fixed
+            auto_fix: If True, run cleanup/fix steps (off when False)
+            dry_run: If set, False means apply fixes; True means report only (overrides
+                auto_fix: dry_run True -> auto_fix False, dry_run False -> auto_fix True)
         """
+        if dry_run is not None:
+            auto_fix = not dry_run
+        
         report = {
             'timestamp': datetime.now().isoformat(),
             'issues_found': {},
@@ -1846,6 +1963,7 @@ class Database:
         
         if total_issues == 0:
             report['status'] = 'clean'
+            report['qc_check'] = self.verify_qc_consistency()
             return report
         
         if auto_fix:
@@ -1869,4 +1987,5 @@ class Database:
         else:
             report['status'] = 'issues_detected'
         
+        report['qc_check'] = self.verify_qc_consistency()
         return report

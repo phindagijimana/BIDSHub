@@ -1,0 +1,22 @@
+# Pre-built image deployment (no local Docker build). Keep settings aligned with docker-compose.yml.
+#
+#   export BIDSHUB_IMAGE=ghcr.io/YOUR_ORG/bidshub:3.1.1
+#   export BIDSHUB_DOCKER_FILE=docker-compose.image.yml
+#   ./hub-docker sets BIDSHUB_IMAGE from src/bidshub_version.py (bidshub:<ver>) when unset
+#   ./hub-docker pull && ./hub-docker start
+#
+# Or one-off:  docker compose -f docker-compose.image.yml pull && docker compose -f docker-compose.image.yml up -d
+
+services:
+  bidshub:
+    image: ${BIDSHUB_IMAGE:-bidshub:3.1.1}
+    container_name: bidshub
+    ports:
+      - "${BIDSHUB_HOST_PORT:-8501}:8501"
+    environment:
+      BIDSHUB_NONINTERACTIVE: "1"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

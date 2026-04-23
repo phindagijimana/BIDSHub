@@ -138,28 +138,18 @@ def get_process_info(pid):
 
 
 def find_available_port(start_port=8501):
-    """Find an available port in the range 8500-8550."""
+    """Find an available port from start_port through start_port+50 (inclusive)."""
     import socket
-    
-    # Try default port first
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('localhost', start_port))
-            return start_port
-    except OSError:
-        pass
-    
-    # Try other ports in range
-    for port in range(8500, 8551):
-        if port == start_port:
-            continue
+
+    start = int(os.environ.get("BIDSHUB_DEFAULT_PORT", str(start_port)))
+    end = start + 50
+    for port in range(start, end + 1):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
+                s.bind(("localhost", port))
                 return port
         except OSError:
             continue
-    
     return None
 
 
@@ -234,9 +224,20 @@ def cmd_install():
     )
     print_success("Dependencies installed")
     
+    if os.path.exists(".env"):
+        print_info("Using existing .env (not modified)")
+    elif os.path.exists(".env.example"):
+        print_info("Creating .env from .env.example (optional: add API keys and paths)...")
+        shutil.copy2(".env.example", ".env")
+        print_success("Created .env — edit for Pennsieve/cloud paths or set them in the app later")
+    else:
+        print_warning(".env.example not found; create .env yourself if needed")
+    
     # Initialize database
     print_info("Initializing database...")
-    subprocess.run([venv_python, "scripts/init_db.py"], check=True)
+    run_env = os.environ.copy()
+    run_env["BIDSHUB_NONINTERACTIVE"] = "1"
+    subprocess.run([venv_python, "scripts/init_db.py"], check=True, env=run_env)
     print_success("Database initialized")
     
     # Create logs directory
@@ -244,7 +245,7 @@ def cmd_install():
     
     print()
     print_success("Installation complete!")
-    print_info("Run './explorer start' to launch the application")
+    print_info("Run './hub start' to launch the application")
 
 
 # Command: start
@@ -285,7 +286,8 @@ def cmd_start():
     # Find available port
     port = find_available_port()
     if port is None:
-        print_error("No available ports in range 8500-8550")
+        sp = int(os.environ.get("BIDSHUB_DEFAULT_PORT", 8501))
+        print_error(f"No available ports in range {sp}-{sp + 50}")
         sys.exit(1)
     
     # Launch Streamlit directly (not via launch.py wrapper)
@@ -462,7 +464,7 @@ def cmd_status():
             print_warning("Found orphaned Streamlit process")
             print_info(f"Port: {port}")
             print_info(f"URL: http://localhost:{port}")
-            print_info("Run './explorer stop' to clean up")
+            print_info("Run './hub stop' to clean up")
     
     print()
     
@@ -524,7 +526,7 @@ def cmd_logs():
             print_warning("No logs found")
     else:
         print_warning("Streamlit logs directory not found")
-        print_info("Start the application first")
+        print_info("Start the application first: ./hub start")
 
 
 # Command: update
@@ -559,7 +561,7 @@ def cmd_update():
     
     print()
     print_success("Update complete!")
-    print_info("Run './explorer restart' to apply changes")
+    print_info("Run './hub restart' to apply changes")
 
 
 # Command: test
@@ -680,7 +682,7 @@ def cmd_clean():
     
     print()
     print_success("Cleanup complete!")
-    print_info("Run './explorer install' to reinstall")
+    print_info("Run './hub install' to reinstall")
 
 
 # Command: config
@@ -699,7 +701,7 @@ def cmd_config():
                     print(line)
     else:
         print_warning("No .env file found")
-        print_info("Create from template: cp .env.example .env")
+        print_info("Run './hub install' to create from .env.example, or: cp .env.example .env")
 
 
 # Command: help
