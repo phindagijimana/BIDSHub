@@ -8,8 +8,8 @@
 
 | | |
 |---|---|
-| **[USER_GUIDE.md](USER_GUIDE.md)** | BIDS, platforms, install (native + Docker), workflows, security, and maintainer notes |
-| **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | Install, pip, venv, Docker, platform issues, and fixes |
+| **[USER_GUIDE.md](USER_GUIDE.md)** | Concise: BIDS, install, platforms, workflows, security / maintainers |
+| **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | Concise: install, Docker, BIDS, connections, fixes |
 | **README.md** (this file) | Short intro and CLI only |
 
 ## Quick start
