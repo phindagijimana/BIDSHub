@@ -36,8 +36,6 @@ cd BIDSHUB
 ./hub-docker help
 ```
 
-BIDSHub has **no** FreeSurfer / MELD “license” step (that belongs to other stacks such as *neuroinsight_research* with a `./research` CLI). For platform **API** keys, use **`.env`** after `./hub install` or the in-app settings.
-
 **Pre-built image:** set `BIDSHUB_DOCKER_FILE=docker-compose.image.yml` and `BIDSHUB_IMAGE=…` — [USER_GUIDE.md](USER_GUIDE.md#native-and-docker-cli).
 
 **Windows (native):** `bin\explorer.bat`.
