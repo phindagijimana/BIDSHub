@@ -54,6 +54,10 @@ data/*
 *.log
 logs/
 
+# Runtime artifacts (written by ./hub start)
+.explorer.pid
+.explorer.port
+
 # Testing
 .pytest_cache/
 .coverage
