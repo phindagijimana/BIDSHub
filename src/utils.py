@@ -218,22 +218,98 @@ def filter_subjects(subjects: List[Dict], filters: Dict) -> List[Dict]:
     return filtered
 
 
+def enrich_subjects_for_display(subjects: List[Dict], db) -> List[Dict]:
+    """Add display fields the v3 ``subjects`` table no longer stores (v3.1.2+).
+
+    The Browse Subjects and QC tables need per-subject demographics, session
+    labels, scan counts and modalities, but the ``subjects`` table only holds
+    identity + QC columns. This mutates each subject dict in place, pulling:
+
+    - sessions / scan_count / modalities from the database
+      (:meth:`Database.get_display_stats_for_dataset`), and
+    - age / sex / diagnosis from each dataset's ``participants.tsv``.
+
+    Queries/file reads are batched per dataset, so cost scales with the number
+    of distinct datasets, not subjects. Safe to call with mixed-dataset lists.
+    """
+    from collections import defaultdict
+    from src.metadata_handler import MetadataHandler
+
+    by_dataset = defaultdict(list)
+    for s in subjects:
+        by_dataset[s.get('dataset_id')].append(s)
+
+    for dataset_id, rows in by_dataset.items():
+        stats = {}
+        participants = {}
+        if dataset_id is not None and db is not None:
+            try:
+                stats = db.get_display_stats_for_dataset(dataset_id)
+            except Exception:
+                stats = {}
+            try:
+                dataset = db.get_dataset(dataset_id)
+                root = dataset.get('root_path') if dataset else None
+                if root:
+                    participants = MetadataHandler.parse_participants_tsv(
+                        str(Path(root) / 'participants.tsv')
+                    )
+            except Exception:
+                participants = {}
+
+        for s in rows:
+            label = s.get('subject_id', '')
+            st_ = stats.get(label, {})
+            s['session_labels'] = st_.get('session_labels', 'None')
+            s['scan_count'] = st_.get('scan_count', 0)
+            s['modalities_list'] = st_.get('modalities', [])
+
+            meta = participants.get(label)
+            if not meta and s.get('local_subject_id'):
+                meta = participants.get(f"sub-{s['local_subject_id']}")
+            if meta:
+                if s.get('age') is None:
+                    s['age'] = meta.get('age')
+                if s.get('sex') is None:
+                    s['sex'] = meta.get('sex')
+                if s.get('diagnosis') is None:
+                    s['diagnosis'] = meta.get('diagnosis')
+
+    return subjects
+
+
 def get_session_labels(subject: Dict) -> str:
     """
     Get formatted session labels for a subject.
-    
+
     Args:
         subject: Subject dictionary
-        
+
     Returns:
         Comma-separated session labels
     """
+    # Preferred: enriched label string from enrich_subjects_for_display()
+    if subject.get('session_labels'):
+        return subject['session_labels']
+
+    # Or a list of session dicts/strings (e.g. from get_subjects_with_sessions)
+    sessions_val = subject.get('sessions')
+    if isinstance(sessions_val, list) and sessions_val:
+        labels = [
+            (s.get('session_id') if isinstance(s, dict) else str(s))
+            for s in sessions_val
+        ]
+        labels = [l for l in labels if l]
+        if labels:
+            return ', '.join(labels)
+
+    # Legacy fixed-session columns (pre-v3 datasets)
     sessions = []
     if subject.get('has_2wk'):
         sessions.append('2WK')
     if subject.get('has_6mo'):
         sessions.append('6MO')
-    
+
     return ', '.join(sessions) if sessions else 'None'
 
 
@@ -280,7 +356,16 @@ def check_disk_space(path: str, required_bytes: int) -> tuple[bool, str]:
 
 
 def _format_modalities(subject: Dict) -> str:
-    """Format modality flags as compact string."""
+    """Format modalities as a compact string.
+
+    Prefers the enriched ``modalities_list`` (distinct BIDS datatypes from the
+    scans table); falls back to the legacy per-modality boolean flags.
+    """
+    mods = subject.get('modalities_list')
+    if isinstance(mods, (list, tuple, set)) and mods:
+        pretty = {'anat': 'T1/T2', 'func': 'fMRI', 'dwi': 'DWI', 'fmap': 'FMAP'}
+        return ', '.join(pretty.get(m, m) for m in mods)
+
     modalities = []
     if subject.get('has_anat'):
         modalities.append('T1/T2')
@@ -327,7 +412,7 @@ def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
             'Diagnosis': subject.get('diagnosis', ''),
             'QC Status': subject.get('qc_status', 'pending').title(),
             'Sessions': get_session_labels(subject),
-            'Scans': f"{subject.get('scan_count_2wk', 0) + subject.get('scan_count_6mo', 0)}",
+            'Scans': f"{subject.get('scan_count', subject.get('scan_count_2wk', 0) + subject.get('scan_count_6mo', 0))}",
             'Modalities': _format_modalities(subject),
             'Flagged': 'Yes' if subject.get('flagged') else ''
         })

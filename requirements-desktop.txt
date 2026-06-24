@@ -1,0 +1,9 @@
+# Extra dependencies for the packaged desktop app (not needed for the native
+# ./hub or Docker flows). Install with:  pip install -r requirements-desktop.txt
+#
+# Native OS webview window host. On macOS uses the Cocoa/pyobjc backend; on
+# Windows uses Edge WebView2; on Linux uses GTK/Qt.
+pywebview>=5.0
+
+# Freeze the desktop app (build only; not a runtime dep)
+pyinstaller>=6.0
