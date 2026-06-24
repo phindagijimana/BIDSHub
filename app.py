@@ -592,7 +592,8 @@ def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
         return
     
     dataset_path = dataset_config['dataset_id_external']
-    target_dir = dataset_config.get('root_path') or str(Path.home() / "data-explorer" / "datasets" / dataset_config['name'])
+    from src.app_paths import downloads_dir
+    target_dir = dataset_config.get('root_path') or str(downloads_dir() / dataset_config['name'])
     
     if not queue_items:
         st.info("No items queued for download")
@@ -1150,10 +1151,12 @@ def page_setup():
             st.success(f"Directory found")
     else:
         # Cloud-only mode: create temp directory for stubs
+        from src.app_paths import downloads_dir
+        default_dl = str(downloads_dir())
         bids_root = st.text_input(
             "Local Working Directory (optional)",
-            value=st.session_state.bids_root or str(Path.home() / "data-explorer" / "datasets"),
-            placeholder=str(Path.home() / "data-explorer" / "datasets"),
+            value=st.session_state.bids_root or default_dl,
+            placeholder=default_dl,
             help="Directory for downloaded files (will be created if needed)"
         )
     
@@ -1903,9 +1906,10 @@ def page_manage_datasets():
                     help="Path to your SSH private key file"
                 )
         
+        from src.app_paths import downloads_dir
         root_path = st.text_input(
             "Local Working Directory",
-            placeholder=str(Path.home() / "data-explorer" / "datasets" / dataset_name),
+            placeholder=str(downloads_dir() / dataset_name),
             help="Directory for downloaded files"
         )
         
@@ -4697,7 +4701,8 @@ def page_export():
                     key="cohort_copy_mode",
                 )
             with col_b:
-                default_out = str(Path.home() / "data-explorer" / "cohorts" / (cohort_name or "my_cohort"))
+                from src.app_paths import cohorts_dir
+                default_out = str(cohorts_dir() / (cohort_name or "my_cohort"))
                 output_path = st.text_input("Output folder", value=default_out, key="cohort_output_path")
                 description = st.text_area(
                     "Description (optional)",

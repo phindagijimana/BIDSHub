@@ -19,13 +19,19 @@ from pathlib import Path
 class Database:
     """Database manager for BIDSHub."""
     
-    def __init__(self, db_path='data/bidshub.db'):
+    def __init__(self, db_path=None):
         """
         Initialize database connection.
-        
+
         Args:
-            db_path: Path to SQLite database file (default: data/bidshub.db)
+            db_path: Path to SQLite database file. If None, resolved via
+                src.app_paths (repo-relative data/bidshub.db by default, or the
+                per-user app-data dir when BIDSHUB_DATA_DIR is set — e.g. the
+                desktop app). Explicit paths (tests, scripts) are used as-is.
         """
+        if db_path is None:
+            from src.app_paths import db_path as _resolve_db_path
+            db_path = _resolve_db_path()
         self.db_path = db_path
         
         # Ensure parent directory exists
