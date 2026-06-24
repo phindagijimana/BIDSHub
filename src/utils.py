@@ -8,6 +8,30 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 
+# Canonical, human-readable display name for each platform. Used anywhere the
+# UI shows a "[Platform]" tag so casing/spelling stay consistent across pages.
+PLATFORM_LABELS = {
+    'pennsieve': 'Pennsieve',
+    'openneuro': 'OpenNeuro',
+    'dandi': 'DANDI',
+    'xnat': 'XNAT',
+    'hpc': 'HPC',
+    'remote_server': 'Remote',
+    'local': 'Local',
+}
+
+
+def platform_label(platform: Optional[str]) -> str:
+    """Return a consistent display label for a platform key.
+
+    Falls back to a Title-cased version of the raw key for any platform not in
+    the map, so a new/unknown platform still renders reasonably.
+    """
+    if not platform:
+        return 'Unknown'
+    return PLATFORM_LABELS.get(platform.lower(), platform.replace('_', ' ').title())
+
+
 def format_file_size(bytes: int) -> str:
     """
     Format bytes to human-readable size.
@@ -292,9 +316,8 @@ def create_subject_dataframe(subjects: List[Dict]) -> pd.DataFrame:
         # Add Dataset column first if multi-dataset
         if has_dataset_info:
             platform = subject.get('_dataset_platform', '')
-            platform_prefix = 'Pennsieve' if platform == 'pennsieve' else 'OpenNeuro'
             dataset_name = subject.get('_dataset_name', 'Unknown')
-            row['Dataset'] = f"[{platform_prefix}] {dataset_name}"
+            row['Dataset'] = f"[{platform_label(platform)}] {dataset_name}"
         
         # Standard columns
         row.update({

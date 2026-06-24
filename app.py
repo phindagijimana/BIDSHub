@@ -2397,8 +2397,9 @@ def page_dashboard():
         complete = stats.get('complete_subjects', 0)
         total = stats.get('total_subjects', 1)
         pct = (complete / total * 100) if total > 0 else 0
-        st.metric("Complete Subjects", complete, 
-                 delta=f"{pct:.1f}% have both sessions")
+        st.metric("Complete Subjects", complete,
+                 delta=f"{pct:.1f}% have both sessions",
+                 delta_color="off")
     
     with col3:
         st.metric("Total Scans", stats.get('total_scans', 0))
@@ -2407,8 +2408,9 @@ def page_dashboard():
         downloaded = stats.get('downloaded_scans', 0)
         total_scans = stats.get('total_scans', 1)
         pct = (downloaded / total_scans * 100) if total_scans > 0 else 0
-        st.metric("Downloaded", downloaded, 
-                 delta=f"{pct:.1f}%")
+        st.metric("Downloaded", downloaded,
+                 delta=f"{pct:.1f}% of scans",
+                 delta_color="off")
     
     st.markdown("---")
     
@@ -3609,32 +3611,38 @@ def render_manual_qc_tab(qc_mgr):
     
     col1, col2, col3, col4 = st.columns(4)
     
+    # delta values here are proportions of total (not trends), so render them
+    # neutral/gray with delta_color="off" instead of a misleading green up-arrow.
     with col1:
         st.metric(
             "Pending",
             summary['pending'],
-            delta=f"{summary['pending_pct']:.1f}%"
+            delta=f"{summary['pending_pct']:.1f}% of total",
+            delta_color="off"
         )
-    
+
     with col2:
         st.metric(
             "Pass",
             summary['pass'],
-            delta=f"{summary['pass_pct']:.1f}%"
+            delta=f"{summary['pass_pct']:.1f}% of total",
+            delta_color="off"
         )
-    
+
     with col3:
         st.metric(
             "Needs Review",
             summary['needs_review'],
-            delta=f"{summary['needs_review_pct']:.1f}%"
+            delta=f"{summary['needs_review_pct']:.1f}% of total",
+            delta_color="off"
         )
-    
+
     with col4:
         st.metric(
             "Fail",
             summary['fail'],
-            delta=f"{summary['fail_pct']:.1f}%"
+            delta=f"{summary['fail_pct']:.1f}% of total",
+            delta_color="off"
         )
     
     # Progress bar
@@ -4631,17 +4639,107 @@ def page_export():
     
     with tab1:
         # Custom Cohort Export
-        st.markdown('<h2 class="section-header">Export Custom Cohort as BIDS Dataset</h2>', 
+        st.markdown('<h2 class="section-header">Export Custom Cohort as BIDS Dataset</h2>',
                     unsafe_allow_html=True)
-        
-        st.info("Create a new BIDS-compliant dataset from selected subjects across multiple source datasets.")
 
-        # Implementation of cohort export UI
-        st.warning(
-            "Custom cohort export is not available in this release. "
-            "In the meantime, use the **QC Results** and **Subject Lists** tabs above to export "
-            "metadata, or the **Download Manager** / **Data Transfer** pages to pull selected subjects."
+        st.info(
+            "Create a new BIDS-compliant dataset from selected subjects across one or more "
+            "source datasets. Works with data that is on disk locally (local or already-downloaded "
+            "datasets); subjects whose files aren't on disk are skipped and reported."
         )
+
+        from src.utils import platform_label
+        from src.cohort_exporter import CohortExporter
+
+        cohort_datasets = st.session_state.db.get_all_datasets(status='active') or []
+        if not cohort_datasets:
+            st.warning("No datasets available. Add a dataset in **Manage Datasets** first.")
+        else:
+            ds_by_id = {d['id']: d for d in cohort_datasets}
+
+            sel_ds_ids = st.multiselect(
+                "Source datasets",
+                options=[d['id'] for d in cohort_datasets],
+                format_func=lambda i: f"[{platform_label(ds_by_id[i]['platform'])}] {ds_by_id[i]['name']}",
+                key="cohort_src_datasets",
+            )
+
+            # Gather subjects across the selected datasets.
+            subject_choices = {}  # display label -> (subject_id, dataset_id)
+            for did in sel_ds_ids:
+                for s in (st.session_state.db.get_subjects_by_dataset(did) or []):
+                    label = (f"[{platform_label(ds_by_id[did]['platform'])}] "
+                             f"{ds_by_id[did]['name']} / {s['subject_id']}")
+                    subject_choices[label] = (s['subject_id'], did)
+
+            if sel_ds_ids and not subject_choices:
+                st.info("No subjects found in the selected dataset(s). Sync subjects in **Manage Datasets** first.")
+
+            sel_subject_labels = st.multiselect(
+                "Subjects to include",
+                options=sorted(subject_choices.keys()),
+                default=sorted(subject_choices.keys()),
+                key="cohort_subjects",
+                help="Defaults to all subjects in the selected datasets.",
+            )
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                cohort_name = st.text_input("Cohort name", value="my_cohort", key="cohort_name")
+                copy_mode = st.radio(
+                    "File handling",
+                    options=["symlink", "copy", "hardlink"],
+                    format_func=lambda m: {
+                        "symlink": "Symlink (fast; references source files)",
+                        "copy": "Copy (independent duplicate)",
+                        "hardlink": "Hardlink (fast; same filesystem only)",
+                    }[m],
+                    key="cohort_copy_mode",
+                )
+            with col_b:
+                default_out = str(Path.home() / "data-explorer" / "cohorts" / (cohort_name or "my_cohort"))
+                output_path = st.text_input("Output folder", value=default_out, key="cohort_output_path")
+                description = st.text_area(
+                    "Description (optional)",
+                    key="cohort_desc",
+                    placeholder="Purpose / inclusion criteria for this cohort",
+                )
+
+            st.caption(f"{len(sel_subject_labels)} subject(s) selected from {len(sel_ds_ids)} dataset(s).")
+
+            export_disabled = not (sel_subject_labels and cohort_name.strip() and output_path.strip())
+            if st.button("Export Cohort", type="primary", disabled=export_disabled, key="cohort_export_btn"):
+                pairs = [subject_choices[label] for label in sel_subject_labels]
+                subject_ids = [p[0] for p in pairs]
+                dataset_ids = [p[1] for p in pairs]
+
+                exporter = CohortExporter(st.session_state.db)
+                with st.spinner(f"Exporting {len(subject_ids)} subject(s) to {output_path}..."):
+                    result = exporter.export_cohort(
+                        subject_ids=subject_ids,
+                        dataset_ids=dataset_ids,
+                        output_path=output_path,
+                        cohort_name=cohort_name.strip(),
+                        description=description.strip(),
+                        copy_mode=copy_mode,
+                    )
+
+                if result.get('success'):
+                    st.success(
+                        f"Exported {result['subjects_exported']} subject(s) to "
+                        f"{result['output_path']} ({result['total_size_mb']:.1f} MB)."
+                    )
+                else:
+                    st.error("Export did not complete — no subject data was copied. See details below.")
+
+                if result.get('warnings'):
+                    with st.expander(f"Warnings ({len(result['warnings'])})"):
+                        for w in result['warnings']:
+                            st.write(f"- {w}")
+                if result.get('errors'):
+                    with st.expander(f"Errors ({len(result['errors'])})", expanded=True):
+                        for e in result['errors']:
+                            st.write(f"- {e}")
     
     with tab2:
         # QC Results Export
@@ -4990,7 +5088,8 @@ def page_viewer():
             if not all_datasets:
                 st.info("No datasets available. Add datasets in Manage Datasets or switch to 'From File System' mode.")
             else:
-                dataset_options = {f"[{ds['platform']}] {ds['name']}": ds['id'] for ds in all_datasets}
+                from src.utils import platform_label
+                dataset_options = {f"[{platform_label(ds['platform'])}] {ds['name']}": ds['id'] for ds in all_datasets}
                 c_ds, c_sub, c_ses, c_scan = st.columns([2, 1, 1, 1], gap="small")
                 
                 with c_ds:

@@ -137,27 +137,38 @@ class CohortExporter:
             "License": "See source datasets for license information",
             "Acknowledgements": f"Data aggregated from {len(source_datasets)} source dataset(s)",
             "ExportDate": datetime.now().isoformat(),
-            "ExportedSubjects": len(set(zip(self._get_subject_list(), dataset_ids)))
+            # One (subject_id, dataset_id) pair per exported subject.
+            "ExportedSubjects": len(dataset_ids)
         }
-        
+
         desc_file = output_root / 'dataset_description.json'
         with open(desc_file, 'w') as f:
             json.dump(dataset_desc, f, indent=2)
-    
-    def _get_subject_list(self) -> List[str]:
-        """Helper to get current subject list."""
-        return []  # Placeholder
-    
+
     def _create_participants_file(self, output_root: Path, 
                                  subject_ids: List[str],
                                  dataset_ids: List[int]) -> pd.DataFrame:
         """Create participants.tsv with metadata from source datasets."""
         participants_data = []
-        
+
+        # Per-dataset lookup keyed by both subject_id and local_subject_id, so
+        # we resolve a subject regardless of which form the caller passes
+        # (get_subject(.,dataset_id) only matches local_subject_id).
+        subject_index = {}
+
         for subject_id, dataset_id in zip(subject_ids, dataset_ids):
-            # Get subject from database
-            subject = self.db.get_subject(subject_id, dataset_id)
-            
+            if dataset_id not in subject_index:
+                idx = {}
+                for s in (self.db.get_subjects_by_dataset(dataset_id) or []):
+                    if s.get('subject_id'):
+                        idx[s['subject_id']] = s
+                    if s.get('local_subject_id'):
+                        idx.setdefault(s['local_subject_id'], s)
+                subject_index[dataset_id] = idx
+
+            subject = subject_index[dataset_id].get(subject_id) or \
+                self.db.get_subject(subject_id, dataset_id)
+
             if subject:
                 # Get source dataset
                 dataset = self.db.get_dataset(dataset_id)
@@ -176,9 +187,13 @@ class CohortExporter:
                     except:
                         pass
                 
+                # Normalize so both bare ("01") and BIDS-prefixed ("sub-01")
+                # subject IDs yield a single correct "sub-01" participant_id.
+                bare_id = subject_id[4:] if subject_id.startswith('sub-') else subject_id
+
                 # Build participant row
                 participant_row = {
-                    'participant_id': f"sub-{subject_id}",
+                    'participant_id': f"sub-{bare_id}",
                     'source_dataset': dataset['name'] if dataset else 'unknown',
                     'source_platform': dataset['platform'] if dataset else 'unknown',
                     'has_2wk': subject.get('has_2wk', 0),
