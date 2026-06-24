@@ -1,0 +1,7 @@
+{
+  "EchoTime": 0.0025,
+  "RepetitionTime": 2.0,
+  "Manufacturer": "Synthetic",
+  "MagneticFieldStrength": 3,
+  "TaskName": "rest"
+}

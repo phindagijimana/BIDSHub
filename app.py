@@ -2270,7 +2270,7 @@ def page_home():
         datasets = []
         if st.session_state.db:
             datasets = st.session_state.db.get_all_datasets(status='active')
-        
+
         if datasets and len(datasets) > 0:
             if st.button("Go to Dashboard →", type="primary", use_container_width=True, key="goto_dashboard"):
                 st.session_state.current_page = 'dashboard'
@@ -2279,6 +2279,44 @@ def page_home():
             if st.button("Getting Started →", type="primary", use_container_width=True, key="getting_started"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
+
+            # Demo mode: register the bundled synthetic BIDS dataset and
+            # jump straight to the dashboard. Lets a first-time user see
+            # the app working before configuring any remote credentials.
+            from src.sample_dataset import (
+                SAMPLE_BIDS_ROOT,
+                load_sample_dataset,
+                sample_dataset_available,
+            )
+            from src.bids_loader import BIDSLoader
+
+            if sample_dataset_available() and st.session_state.db:
+                st.markdown(
+                    "<p style='text-align:center; color:#6b7280; margin-top:0.75rem; "
+                    "margin-bottom:0.5rem; font-size:0.9rem;'>"
+                    "or, no account yet?</p>",
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "Try with sample data",
+                    use_container_width=True,
+                    key="try_sample_data",
+                    help="Loads a small synthetic BIDS dataset bundled with the repo. "
+                         "Nothing leaves your machine.",
+                ):
+                    with st.spinner("Loading sample dataset..."):
+                        ds_id, n_subjects, err = load_sample_dataset(
+                            st.session_state.db, BIDSLoader
+                        )
+                    if err:
+                        st.error(err)
+                    else:
+                        st.session_state.active_dataset_id = ds_id
+                        st.session_state.dataset_name = "BIDSHub Sample"
+                        st.session_state.bids_root = str(SAMPLE_BIDS_ROOT)
+                        st.session_state.current_page = 'dashboard'
+                        st.success(f"Loaded sample dataset with {n_subjects} subjects.")
+                        st.rerun()
     
     # Spacer
     st.markdown("<br><br>", unsafe_allow_html=True)

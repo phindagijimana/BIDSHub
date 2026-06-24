@@ -1,0 +1,9 @@
+{
+  "Name": "BIDSHub Sample Dataset",
+  "BIDSVersion": "1.6.0",
+  "DatasetType": "raw",
+  "Authors": [
+    "BIDSHub demo"
+  ],
+  "License": "CC0"
+}

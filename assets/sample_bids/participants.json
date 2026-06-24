@@ -1,0 +1,23 @@
+{
+  "age": {
+    "Description": "Age at scan (years)",
+    "Units": "year"
+  },
+  "sex": {
+    "Description": "Biological sex",
+    "Levels": {
+      "M": "male",
+      "F": "female"
+    }
+  },
+  "diagnosis": {
+    "Description": "Primary diagnosis",
+    "Levels": {
+      "control": "healthy control",
+      "TBI": "traumatic brain injury"
+    }
+  },
+  "site": {
+    "Description": "Acquisition site"
+  }
+}
