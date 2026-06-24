@@ -258,6 +258,7 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
             proc.terminate()
             return 1
         logger.info("BIDSHub ready at http://localhost:%s", port)
+        _check_updates_async()
 
         if open_gui:
             open_window(port)
@@ -270,6 +271,22 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
     finally:
         _terminate(proc)
     return 0
+
+
+def _check_updates_async() -> None:
+    """Notify (log-only) if a newer release exists. Never blocks or raises."""
+    import threading
+
+    def _run():
+        try:
+            from desktop.updates import check_for_update
+            info = check_for_update()
+            if info:
+                logger.info("Update available: %s — %s", info["version"], info["url"])
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _terminate(proc: subprocess.Popen) -> None:

@@ -1,0 +1,67 @@
+name: Desktop build
+
+# Builds the packaged desktop app per OS, smoke-tests the frozen bundle, and
+# uploads installers as artifacts. Runs on version tags and on demand.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r requirements-desktop.txt
+
+      - name: Generate icons
+        run: python packaging/make_icons.py
+
+      - name: Build bundle
+        run: pyinstaller packaging/bidshub.spec --noconfirm --clean
+
+      - name: Smoke-test frozen bundle
+        run: python packaging/smoke_test.py
+
+      # ---- macOS: .dmg (signing/notarization happen on a machine with certs) ----
+      - name: Build .dmg (macOS)
+        if: runner.os == 'macOS'
+        run: bash packaging/make_dmg.sh
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIDSHub-macos-dmg
+          path: dist/BIDSHub.dmg
+
+      # ---- Windows: Inno Setup installer ----
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer (Windows)
+        if: runner.os == 'Windows'
+        run: iscc packaging/windows_installer.iss
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIDSHub-windows-setup
+          path: dist/BIDSHub-Setup.exe
