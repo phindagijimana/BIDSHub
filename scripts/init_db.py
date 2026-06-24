@@ -281,7 +281,7 @@ def init_database(db_path='data/bidshub.db'):
             conn.close()
 
 
-def verify_database(db_path='data/tracktbi.db'):
+def verify_database(db_path='data/bidshub.db'):
     """
     Verify the database schema is correct.
     
@@ -328,8 +328,8 @@ if __name__ == "__main__":
     print("BIDSHub - Database Initialization")
     print("=" * 50)
     
-    # Initialize database
-    db_path = 'data/tracktbi.db'
+    # Initialize database (canonical runtime path; matches Database() default)
+    db_path = 'data/bidshub.db'
     
     if os.path.exists(db_path):
         if os.environ.get("BIDSHUB_NONINTERACTIVE", ""):

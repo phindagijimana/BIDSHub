@@ -304,8 +304,8 @@ cmd_status() {
     fi
     
     # Database status
-    if [ -f "data/tracktbi.db" ]; then
-        DB_SIZE=$(du -h data/tracktbi.db | cut -f1)
+    if [ -f "data/bidshub.db" ]; then
+        DB_SIZE=$(du -h data/bidshub.db | cut -f1)
         print_success "Database: $DB_SIZE"
     else
         print_warning "Database: not initialized"
@@ -432,9 +432,9 @@ cmd_clean() {
     fi
     
     # Remove database
-    if [ -f "data/tracktbi.db" ]; then
+    if [ -f "data/bidshub.db" ]; then
         print_info "Removing database..."
-        rm -f data/tracktbi.db
+        rm -f data/bidshub.db
         print_success "Database removed"
     fi
     

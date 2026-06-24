@@ -18,7 +18,7 @@
 
 ```bash
 git clone https://github.com/phindagijimana/BIDSHub.git
-cd BIDSHUB
+cd BIDSHub
 ./hub install    # venv, locked deps, .env from .env.example, init DB
 ./hub start      # launch Streamlit (default http://localhost:8501 or next free 8501–8551)
 ./hub stop       # stop the app
@@ -29,7 +29,7 @@ cd BIDSHUB
 
 ```bash
 git clone https://github.com/phindagijimana/BIDSHub.git
-cd BIDSHUB
+cd BIDSHub
 ./hub-docker install   # .env, build or pull image
 ./hub-docker start
 ./hub-docker stop      # stop container; data volume on host is kept
@@ -48,6 +48,6 @@ MIT — see [LICENSE](LICENSE).
 
 ## Support
 
-**Issues:** [GitHub Issues](https://github.com/phindagijimana/data_explorer/issues)
+**Issues:** [GitHub Issues](https://github.com/phindagijimana/BIDSHub/issues)
 
 **Version 3.1.1**
