@@ -212,7 +212,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Download Details", expanded=False)
+        details_expander = st.expander("Download Details", expanded=False)
     
     total = len(queue_items)
     successful = 0
@@ -305,7 +305,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'file': file_name,
-                'status': '✅ Success',
+                'status': 'Success',
                 'size': format_file_size(file_size),
                 'time': f"{item_elapsed:.1f}s",
                 'speed': f"{speed_mbps:.2f} MB/s" if speed_mbps > 0 else "N/A"
@@ -345,7 +345,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
     
     if successful > 0:
         st.success(f"""
-        ✅ **Download Complete!**  
+        **Download Complete!**  
         **Success**: {successful}/{total} files ({(successful/total)*100:.1f}%)  
         **Total Size**: {format_file_size(downloaded_bytes)}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
@@ -409,7 +409,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Download Details", expanded=False)
+        details_expander = st.expander("Download Details", expanded=False)
     
     total_subjects = len(subjects_to_download)
     total_files = len(queue_items)
@@ -504,7 +504,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
             
             download_log.append({
                 'subject': subject_id,
-                'status': '✅ Success',
+                'status': 'Success',
                 'files': len(items),
                 'time': f"{subject_elapsed:.1f}s"
             })
@@ -543,7 +543,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
     
     if successful > 0:
         st.success(f"""
-        ✅ **Download Complete!**  
+        **Download Complete!**  
         **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
         **Total Files**: {total_files}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
@@ -613,7 +613,7 @@ def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Download Details", expanded=False)
+        details_expander = st.expander("Download Details", expanded=False)
     
     total_subjects = len(subjects_to_download)
     total_files = len(queue_items)
@@ -709,7 +709,7 @@ def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
             
             download_log.append({
                 'subject': subject_id,
-                'status': '✅ Success',
+                'status': 'Success',
                 'files': len(items),
                 'time': f"{subject_elapsed:.1f}s"
             })
@@ -748,7 +748,7 @@ def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
     
     if successful > 0:
         st.success(f"""
-        ✅ **Download Complete!**  
+        **Download Complete!**  
         **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
         **Total Files**: {total_files}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
@@ -802,7 +802,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     # Filter out non-existent files
     valid_paths = [p for p in file_paths if Path(p).exists()]
     if len(valid_paths) < len(file_paths):
-        st.warning(f"⚠️ Skipping {len(file_paths) - len(valid_paths)} non-existent files")
+        st.warning(f"Skipping {len(file_paths) - len(valid_paths)} non-existent files")
     
     if not valid_paths:
         st.error("No valid files to upload")
@@ -818,7 +818,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Upload Details", expanded=False)
+        details_expander = st.expander("Upload Details", expanded=False)
     
     total = len(valid_paths)
     uploaded_bytes = 0
@@ -891,7 +891,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
         else:
             upload_log.append({
                 'file': file_name,
-                'status': '✅ Success',
+                'status': 'Success',
                 'size': format_file_size(file_size),
                 'error': '—'
             })
@@ -908,7 +908,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     
     if results['successful'] > 0:
         st.success(f"""
-        ✅ **Upload Complete!**  
+        **Upload Complete!**  
         **Success**: {results['successful']}/{total} files ({(results['successful']/total)*100:.1f}%)  
         **Total Size**: {format_file_size(successful_size)}  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
@@ -1121,8 +1121,8 @@ def page_setup():
             "Data location",
             options=['cloud_only', 'local'],
             format_func=lambda x: {
-                'cloud_only': '☁️ Cloud only (browse & download remotely)',
-                'local': '💾 Local (BIDS data already on disk)'
+                'cloud_only': 'Cloud only (browse & download remotely)',
+                'local': 'Local (BIDS data already on disk)'
             }[x],
             key="data_mode",
             index=0
@@ -1503,7 +1503,7 @@ def page_manage_datasets():
                 'local': ''
             }
             
-            with st.expander(f"{platform_emoji_map.get(dataset['platform'], '📊')} {dataset['name']}", 
+            with st.expander(f"{platform_emoji_map.get(dataset['platform'], '')} {dataset['name']}", 
                            expanded=False):
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -1610,7 +1610,7 @@ def page_manage_datasets():
                                             last_sync_date=datetime.now()
                                         )
                                         
-                                        st.success(f"✅ Synced {indexed_count} subjects, {scan_count} scans from {dataset['name']}")
+                                        st.success(f"Synced {indexed_count} subjects, {scan_count} scans from {dataset['name']}")
                                         st.rerun()
                                     else:
                                         st.error("Could not create agent for this platform")
@@ -1633,7 +1633,7 @@ def page_manage_datasets():
                                type="secondary"):
                         # Confirm deletion
                         if len(subjects) > 0:
-                            st.warning(f"⚠️ This will delete {len(subjects)} subjects and all associated data!")
+                            st.warning(f"This will delete {len(subjects)} subjects and all associated data!")
                             if st.button(f"Confirm Delete", key=f"confirm_delete_{dataset['id']}",
                                        type="primary"):
                                 st.session_state.db.delete_dataset(dataset['id'])
@@ -1652,15 +1652,15 @@ def page_manage_datasets():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔍 Check Integrity", use_container_width=True):
+        if st.button("Check Integrity", use_container_width=True):
             with st.spinner("Checking database integrity..."):
                 issues = st.session_state.db.check_integrity()
                 total_issues = sum(issues.values())
                 
                 if total_issues == 0:
-                    st.success("✅ Database is clean - no integrity issues found")
+                    st.success("Database is clean - no integrity issues found")
                 else:
-                    st.warning(f"⚠️ Found {total_issues} integrity issue(s):")
+                    st.warning(f"Found {total_issues} integrity issue(s):")
                     for issue_type, count in issues.items():
                         if count > 0:
                             st.markdown(f"- **{issue_type.replace('_', ' ').title()}**: {count}")
@@ -1675,7 +1675,7 @@ def page_manage_datasets():
                 report = st.session_state.db.run_integrity_maintenance(auto_fix=True)
                 
                 if report['status'] == 'fixed':
-                    st.success("✅ Database maintenance complete!")
+                    st.success("Database maintenance complete!")
                     
                     fixes = report.get('fixes_applied', {})
                     if fixes:
@@ -1698,7 +1698,7 @@ def page_manage_datasets():
                 unsafe_allow_html=True)
     
     if len(datasets) >= 5:
-        st.warning("⚠️ Maximum of 5 datasets supported in v1.5.")
+        st.warning("Maximum of 5 datasets supported in v1.5.")
         return
     
     # Platform selection (v3.1.1+: Added HPC and Remote Server)
@@ -1962,7 +1962,7 @@ def page_manage_datasets():
                             is_valid, validation_msg = validate_bids_dataset(root_path)
                             
                             if not is_valid:
-                                st.warning("⚠️ BIDS Validation Issues:")
+                                st.warning("BIDS Validation Issues:")
                                 st.text(validation_msg)
                                 st.info(ErrorMessages.suggest_fix('NOT_BIDS_COMPLIANT', None))
                                 
@@ -1972,7 +1972,7 @@ def page_manage_datasets():
                                     validation_passed = False
                                     st.error(ErrorMessages.NOT_BIDS_COMPLIANT)
                             else:
-                                st.success("✅ BIDS validation passed!")
+                                st.success("BIDS validation passed!")
                     
                     if validation_passed:
                         # Prepare root_path: For SSH key auth, store key path; otherwise store working dir
@@ -1993,7 +1993,7 @@ def page_manage_datasets():
                         )
                         
                         if dataset_id:
-                            st.success(f"✅ Dataset '{dataset_name}' added successfully!")
+                            st.success(f"Dataset '{dataset_name}' added successfully!")
                             
                             # For local datasets, index subjects immediately
                             if data_location_mode == 'local' and root_path:
@@ -2370,7 +2370,7 @@ def page_dashboard():
         total_issues = sum(issues.values())
         
         if total_issues > 0:
-            with st.expander(f"⚠️ Database Integrity Alert: {total_issues} issue(s) detected", expanded=True):
+            with st.expander(f"Database Integrity Alert: {total_issues} issue(s) detected", expanded=True):
                 for issue_type, count in issues.items():
                     if count > 0:
                         st.markdown(f"- **{issue_type.replace('_', ' ').title()}**: {count}")
@@ -2461,7 +2461,7 @@ def page_subjects():
         selected_dataset_ids = st.multiselect(
             "Show subjects from:",
             options=[d['id'] for d in datasets],
-            format_func=lambda x: next((f"{platform_emojis.get(d['platform'], '📊')} {d['name']}" 
+            format_func=lambda x: next((f"{platform_emojis.get(d['platform'], '')} {d['name']}" 
                                        for d in datasets if d['id'] == x), str(x)),
             default=[d['id'] for d in datasets],
             key="subject_dataset_filter"
@@ -2705,7 +2705,7 @@ def page_downloads():
     metadata_filter = st.session_state.metadata_filter
     
     # Download Destination Selector (v3.1.1+: Multi-platform support)
-    st.markdown('<h2 class="section-header">📁 Download Destination</h2>', 
+    st.markdown('<h2 class="section-header">Download Destination</h2>', 
                 unsafe_allow_html=True)
     
     st.info("Choose where to save downloaded data - local storage only, or push directly to another platform")
@@ -2743,7 +2743,7 @@ def page_downloads():
                 }
                 
                 dest_dataset_options = {
-                    f"{platform_emojis.get(ds['platform'], '📊')} {ds['name']} ({ds['platform'].upper()})": ds['id'] 
+                    f"{platform_emojis.get(ds['platform'], '')} {ds['name']} ({ds['platform'].upper()})": ds['id'] 
                     for ds in upload_capable_datasets
                 }
                 
@@ -2761,7 +2761,7 @@ def page_downloads():
                 st.session_state.download_dest_platform = selected_dataset['platform']
                 st.session_state.download_dest_name = selected_dataset['name']
                 
-                st.caption(f"✅ Downloads will be pushed to: {selected_dataset['name']} ({selected_dataset['platform'].upper()})")
+                st.caption(f"Downloads will be pushed to: {selected_dataset['name']} ({selected_dataset['platform'].upper()})")
         else:
             st.session_state.download_dest_dataset_id = None
             st.session_state.download_dest_platform = None
@@ -2769,7 +2769,7 @@ def page_downloads():
     st.markdown("---")
     
     # Metadata Filtering Section
-    st.markdown('<h2 class="section-header">🔽 Filter by Metadata</h2>', 
+    st.markdown('<h2 class="section-header">Filter by Metadata</h2>', 
                 unsafe_allow_html=True)
     
     if metadata_filter.is_available():
@@ -2850,7 +2850,7 @@ def page_downloads():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📊 Preview Filtered Results", use_container_width=True):
+            if st.button("Preview Filtered Results", use_container_width=True):
                 # Apply demographic filters first
                 filtered_ids = metadata_filter.filter_subjects(filter_criteria)
                 
@@ -2870,7 +2870,7 @@ def page_downloads():
                     else:
                         filtered_ids = keyword_ids
                     
-                    st.info(f"🔍 Keyword search: found {len(keyword_matches)} matches for {', '.join(filter_criteria['keywords'])}")
+                    st.info(f"Keyword search: found {len(keyword_matches)} matches for {', '.join(filter_criteria['keywords'])}")
                 
                 # Apply modality filter (intersect with previous results)
                 if 'modalities' in filter_criteria:
@@ -2888,7 +2888,7 @@ def page_downloads():
                 st.session_state.filtered_subject_ids = filtered_ids
                 st.session_state.filter_active = True
                 
-                st.success(f"✅ {len(filtered_ids)} subjects match your criteria")
+                st.success(f"{len(filtered_ids)} subjects match your criteria")
                 
                 if summary['demographics']:
                     with st.expander("View Demographics"):
@@ -2953,7 +2953,7 @@ def page_downloads():
         else:
             st.error("Invalid destination dataset selected")
     else:
-        st.info("💾 Active Destination: Downloads saved to local storage only")
+        st.info("Active Destination: Downloads saved to local storage only")
     
     st.markdown("---")
     
@@ -3003,7 +3003,7 @@ def page_downloads():
     filtered_ids = st.session_state.get('filtered_subject_ids', None)
     
     if filter_active and filtered_ids:
-        st.caption(f"🔽 Filters active: {len(filtered_ids)} subjects selected")
+        st.caption(f"Filters active: {len(filtered_ids)} subjects selected")
     
     col1, col2, col3 = st.columns(3)
     
@@ -3326,7 +3326,7 @@ def page_downloads():
                     session_type = 'Download' if 'download_session_' in session['key'] else 'Upload'
                     
                     history_data.append({
-                        'Type': f"{'⬇️' if session_type == 'Download' else '⬆️'} {session_type}",
+                        'Type': f"{'' if session_type == 'Download' else ''} {session_type}",
                         'Platform': session_data.get('platform', 'Unknown').title(),
                         'Timestamp': session_data.get('timestamp', session['created_date'])[:19],
                         'Success': session_data.get('successful', 0),
@@ -3338,7 +3338,7 @@ def page_downloads():
                     pass
             
             if history_data:
-                with st.expander("📊 View Recent Sessions", expanded=False):
+                with st.expander("View Recent Sessions", expanded=False):
                     history_df = pd.DataFrame(history_data)
                     st.dataframe(history_df, use_container_width=True, hide_index=True)
                     
@@ -3356,7 +3356,7 @@ def page_downloads():
     
     # Settings
     st.markdown("---")
-    st.markdown('<h2 class="section-header">⚙️ Settings</h2>', 
+    st.markdown('<h2 class="section-header">Settings</h2>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
@@ -3392,7 +3392,7 @@ def page_downloads():
             options=['files', 'directory'],
             format_func=lambda x: {
                 'files': ' Individual Files (drag & drop)',
-                'directory': '📁 Directory (select folder from local system)'
+                'directory': 'Directory (select folder from local system)'
             }[x],
             key="upload_mode",
             horizontal=True
@@ -3434,7 +3434,7 @@ def page_downloads():
                     
                     total_size = sum(f.stat().st_size for f in files_in_dir)
                     
-                    with st.expander(f"📁 Preview: {len(files_in_dir)} files ({format_file_size(total_size)})"):
+                    with st.expander(f"Preview: {len(files_in_dir)} files ({format_file_size(total_size)})"):
                         preview_df = pd.DataFrame([
                             {
                                 'File': f.name,
@@ -3586,7 +3586,7 @@ def page_qc():
     auto_qc = st.session_state.automated_qc
     
     # QC Type Tabs (v3.1+: Added Pennsieve Sync tab)
-    tab1, tab2, tab3 = st.tabs(["📋 Manual QC", "🤖 Automated QC", "☁️ Pennsieve Sync"])
+    tab1, tab2, tab3 = st.tabs(["Manual QC", "Automated QC", "Pennsieve Sync"])
     
     with tab1:
         render_manual_qc_tab(qc_mgr)
@@ -3882,7 +3882,7 @@ def render_automated_qc_tab(auto_qc):
                 warn_count = sum(1 for r in results.values() if r['status'] == 'warning')
                 fail_count = sum(1 for r in results.values() if r['status'] == 'fail')
                 
-                st.success(f"✅ Automated QC complete: {pass_count} pass, {warn_count} warnings, {fail_count} fail")
+                st.success(f"Automated QC complete: {pass_count} pass, {warn_count} warnings, {fail_count} fail")
                 st.rerun()
     
     st.markdown("---")
@@ -3934,7 +3934,7 @@ def render_automated_qc_tab(auto_qc):
             st.session_state.current_page = 'subject_detail'
             st.rerun()
     else:
-        st.success("✅ No automated QC issues detected")
+        st.success("No automated QC issues detected")
     
     st.markdown("---")
     
@@ -4098,7 +4098,7 @@ def render_pennsieve_sync_tab(qc_mgr):
                     )
                 
                 if success:
-                    st.success(f"✅ QC CSV exported: {csv_filename}")
+                    st.success(f"QC CSV exported: {csv_filename}")
                     st.session_state.last_qc_csv_path = csv_path
                     
                     # Offer download
@@ -4120,7 +4120,7 @@ def render_pennsieve_sync_tab(qc_mgr):
         
         upload_disabled = not (has_csv and has_credentials and unsynced_count > 0)
         
-        if st.button("☁️ Push to Pennsieve", 
+        if st.button("Push to Pennsieve", 
                     type="primary", 
                     use_container_width=True,
                     disabled=upload_disabled):
@@ -4164,7 +4164,7 @@ def render_pennsieve_sync_tab(qc_mgr):
                         scan_ids = [scan['id'] for scan in unsynced_scans]
                         st.session_state.db.mark_scans_synced(scan_ids)
                         
-                        st.success(f"✅ QC results uploaded to Pennsieve!")
+                        st.success(f"QC results uploaded to Pennsieve!")
                         st.info(f"Location: derivatives/qc/{Path(csv_path).name}")
                         st.balloons()
                         
@@ -4314,7 +4314,7 @@ def display_session_scans(session_id, scans, subject_id, platform=None, dataset_
                     # Quick QC buttons
                     qc_col1, qc_col2, qc_col3 = st.columns(3)
                     with qc_col1:
-                        if st.button("✅", key=f"qc_pass_{scan_id}_{idx}", help="Mark as Pass"):
+                        if st.button("Pass", key=f"qc_pass_{scan_id}_{idx}", help="Mark as Pass"):
                             if scan_id:
                                 st.session_state.db.update_scan_qc(
                                     scan_id=scan_id,
@@ -4627,7 +4627,7 @@ def page_export():
         return
     
     # Create tabs for different export options
-    tab1, tab2, tab3 = st.tabs(["📤 Export Custom Cohort", "📊 QC Results", "📋 Subject Lists"])
+    tab1, tab2, tab3 = st.tabs(["Export Custom Cohort", "QC Results", "Subject Lists"])
     
     with tab1:
         # Custom Cohort Export
@@ -5403,7 +5403,7 @@ def page_transfer():
         st.markdown("### Source Platform")
         
         source_dataset_options = {
-            f"{platform_emojis.get(ds['platform'], '📊')} {ds['name']}": ds['id']
+            f"{platform_emojis.get(ds['platform'], '')} {ds['name']}": ds['id']
             for ds in all_datasets
         }
         
@@ -5471,7 +5471,7 @@ def page_transfer():
         upload_capable_platforms = ['local', 'pennsieve', 'xnat', 'hpc', 'remote_server']
         
         dest_dataset_options = {
-            f"{platform_emojis.get(ds['platform'], '📊')} {ds['name']}": ds['id']
+            f"{platform_emojis.get(ds['platform'], '')} {ds['name']}": ds['id']
             for ds in all_datasets
             if ds['id'] != source_dataset_id and ds['platform'] in upload_capable_platforms
         }
@@ -5572,7 +5572,7 @@ def page_transfer():
             st.metric("Mode", "Direct" if transfer_mode == 'direct' else "Cached")
         
         # Transfer route
-        st.info(f"{platform_emojis.get(source_dataset['platform'], '📊')} {source_dataset['name']} → {platform_emojis.get(dest_dataset['platform'], '📊')} {dest_dataset['name']}")
+        st.info(f"{platform_emojis.get(source_dataset['platform'], '')} {source_dataset['name']} → {platform_emojis.get(dest_dataset['platform'], '')} {dest_dataset['name']}")
         
         # Execute button
         if st.button("Start Transfer", type="primary", use_container_width=True, key="execute_transfer"):
@@ -5619,7 +5619,7 @@ def page_transfer():
                     'Source': transfer_info.get('source_name', 'Unknown'),
                     'Destination': transfer_info.get('dest_name', 'Unknown'),
                     'Subjects': transfer_info.get('successful', 0),
-                    'Status': '✅ Success' if transfer_info.get('failed', 0) == 0 else f"⚠️ {transfer_info.get('failed', 0)} failed"
+                    'Status': 'Success' if transfer_info.get('failed', 0) == 0 else f"{transfer_info.get('failed', 0)} failed"
                 })
             
             import pandas as pd
@@ -5676,7 +5676,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
         progress_bar = st.progress(0)
         status_col1, status_col2, status_col3 = st.columns(3)
         status_text = st.empty()
-        details_expander = st.expander("📊 Transfer Details", expanded=True)
+        details_expander = st.expander("Transfer Details", expanded=True)
     
     total_subjects = len(subject_ids)
     successful = 0
@@ -5973,7 +5973,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
             successful += 1
             transfer_log.append({
                 'subject': subject_id,
-                'status': '✅ Success',
+                'status': 'Success',
                 'files': transferred_count,
                 'time': f"{subject_elapsed:.1f}s"
             })
@@ -6004,7 +6004,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
     
     if successful > 0:
         st.success(f"""
-        ✅ **Transfer Complete!**  
+        **Transfer Complete!**  
         **Subjects**: {successful}/{total_subjects} ({(successful/total_subjects)*100:.1f}%)  
         **Time**: {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s  
         **Avg Time/Subject**: {total_elapsed/successful:.1f}s
@@ -6036,7 +6036,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
     # Show failed transfers if any
     failed_list = recovery.get_failed_transfers()
     if failed_list:
-        st.warning(f"⚠️ {len(failed_list)} file(s) failed after {recovery.max_retries + 1} attempts")
+        st.warning(f"{len(failed_list)} file(s) failed after {recovery.max_retries + 1} attempts")
         with st.expander("View Failed Transfers"):
             for failure in failed_list:
                 st.markdown(f"- **{failure['operation']}**: {failure['error']} ({failure['attempts']} attempts)")
