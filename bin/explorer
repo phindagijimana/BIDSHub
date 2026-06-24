@@ -58,12 +58,18 @@ cmd_install() {
     print_header "Installing $APP_NAME"
     echo ""
     
-    # Check Python
+    # Check Python (3.10+ required — see pyproject.toml)
     if ! command -v python3 &> /dev/null; then
         print_error "Python 3 not found"
+        print_info "Install Python 3.10+ (macOS: 'brew install python@3.12') and re-run './hub install'"
         exit 1
     fi
-    print_success "Python 3 found: $(python3 --version)"
+    if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+        print_error "Python 3.10+ required, found $(python3 --version 2>&1)"
+        print_info "Install a newer Python (macOS: 'brew install python@3.12') and re-run './hub install'"
+        exit 1
+    fi
+    print_success "Python found: $(python3 --version)"
     
     # Create virtual environment
     if [ ! -d "$VENV_DIR" ]; then
@@ -77,14 +83,14 @@ cmd_install() {
     # Activate virtual environment
     source $VENV_DIR/bin/activate
     
-    # Upgrade pip
+    # Upgrade pip (use `python -m pip` — robust against long venv paths / stale pip shebang)
     print_info "Upgrading pip..."
-    pip install --upgrade pip --quiet
+    python -m pip install --upgrade pip --quiet
     print_success "pip upgraded"
-    
+
     # Install dependencies (fully pinned; see requirements.in for top-level deps)
-    print_info "Installing dependencies..."
-    pip install -r requirements.txt --quiet
+    print_info "Installing dependencies (first run downloads ~hundreds of MB; this can take a few minutes)..."
+    python -m pip install -r requirements.txt --quiet
     print_success "Dependencies installed"
     
     # One-time .env from template (never overwrite: user may already have secrets)
@@ -358,7 +364,7 @@ cmd_update() {
         
         # Update dependencies
         print_info "Updating dependencies..."
-        pip install --upgrade -r requirements.txt --quiet
+        python -m pip install --upgrade -r requirements.txt --quiet
         print_success "Dependencies updated"
     else
         print_warning "Virtual environment not found"
