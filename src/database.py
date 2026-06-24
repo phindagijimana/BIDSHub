@@ -326,10 +326,12 @@ class Database:
             cursor = conn.cursor()
             
             if dataset_id:
+                # Match either the canonical BIDS label (subject_id) or the
+                # local id, scoped to the dataset — callers pass either form.
                 cursor.execute("""
-                    SELECT * FROM subjects 
-                    WHERE local_subject_id = ? AND dataset_id = ?
-                """, (subject_id, dataset_id))
+                    SELECT * FROM subjects
+                    WHERE (subject_id = ? OR local_subject_id = ?) AND dataset_id = ?
+                """, (subject_id, subject_id, dataset_id))
             else:
                 # Backwards compatibility - try to find by subject_id or local_subject_id
                 cursor.execute("""
@@ -1614,14 +1616,82 @@ class Database:
                 subject['sessions'] = sessions
             
             return subjects
-            
+
         except sqlite3.Error as e:
             print(f"Error getting subjects with sessions: {e}")
             return []
-            
+
         finally:
             conn.close()
-    
+
+    def get_display_stats_for_dataset(self, dataset_id: int) -> Dict[str, Dict]:
+        """Per-subject session/scan/modality counts for one dataset (v3.1.2+).
+
+        Returns a dict keyed by BIDS subject label (e.g. 'sub-01') with:
+            session_labels: comma-separated session ids ('None' if no sessions)
+            session_count:  number of sessions
+            scan_count:     number of scans
+            modalities:     sorted list of distinct modalities
+
+        Used to enrich the Browse Subjects / QC tables, whose source rows
+        (the ``subjects`` table) no longer carry these as columns. Two grouped
+        queries rather than N per-subject lookups.
+        """
+        stats: Dict[str, Dict] = {}
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Sessions (subject_sessions stores the BIDS label in subject_id)
+            cursor.execute(
+                """
+                SELECT subject_id, GROUP_CONCAT(session_id, ', ') AS labels,
+                       COUNT(*) AS n
+                FROM subject_sessions
+                WHERE dataset_id = ?
+                GROUP BY subject_id
+                """,
+                (dataset_id,),
+            )
+            for row in cursor.fetchall():
+                stats[row["subject_id"]] = {
+                    "session_labels": row["labels"] or "None",
+                    "session_count": row["n"] or 0,
+                    "scan_count": 0,
+                    "modalities": [],
+                }
+
+            # Scans + modalities (scans.subject_id holds subjects.id as text)
+            cursor.execute(
+                """
+                SELECT sub.subject_id AS label,
+                       COUNT(*) AS n,
+                       GROUP_CONCAT(DISTINCT s.modality) AS mods
+                FROM scans s
+                JOIN subjects sub ON sub.id = CAST(s.subject_id AS INTEGER)
+                WHERE sub.dataset_id = ?
+                GROUP BY sub.subject_id
+                """,
+                (dataset_id,),
+            )
+            for row in cursor.fetchall():
+                entry = stats.setdefault(
+                    row["label"],
+                    {"session_labels": "None", "session_count": 0,
+                     "scan_count": 0, "modalities": []},
+                )
+                entry["scan_count"] = row["n"] or 0
+                mods = [m for m in (row["mods"] or "").split(",") if m]
+                entry["modalities"] = sorted(set(mods))
+
+            return stats
+
+        except sqlite3.Error as e:
+            print(f"Error getting display stats for dataset {dataset_id}: {e}")
+            return stats
+        finally:
+            conn.close()
+
     # ===== Data Integrity Operations (v3.1.1+) =====
     
     def check_integrity(self) -> Dict[str, any]:

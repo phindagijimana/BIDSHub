@@ -2609,9 +2609,14 @@ def page_subjects():
                 st.session_state.current_page_num = 1
                 st.rerun()
     
+    # Enrich with demographics (participants.tsv) + session/scan/modality counts
+    # (the subjects table itself no longer stores these as columns).
+    from src.utils import enrich_subjects_for_display
+    enrich_subjects_for_display(paginated_subjects, st.session_state.db)
+
     # Create DataFrame for display (paginated)
     df = create_subject_dataframe(paginated_subjects)
-    
+
     # Display table with selection
     st.dataframe(
         df,
@@ -2624,18 +2629,31 @@ def page_subjects():
     st.markdown("---")
     st.markdown("### View Subject Details")
     
-    subject_ids = [s['subject_id'] for s in paginated_subjects]
-    selected = st.selectbox(
+    # Index-based options so the same BIDS label in different datasets stays
+    # distinct (and we can carry the dataset id into the detail page).
+    from src.utils import platform_label
+    multi_dataset = any('_dataset_name' in s for s in paginated_subjects)
+
+    def _subject_option_label(i):
+        s = paginated_subjects[i]
+        if multi_dataset:
+            return f"{s['subject_id']} — [{platform_label(s.get('_dataset_platform'))}] {s.get('_dataset_name', '')}"
+        return s['subject_id']
+
+    selected_idx = st.selectbox(
         "Select subject to view",
-        options=subject_ids,
-        index=0 if subject_ids else None,
+        options=list(range(len(paginated_subjects))),
+        format_func=_subject_option_label,
+        index=0 if paginated_subjects else None,
         key="selected_subject_view"
     )
-    
+
     col1, col2 = st.columns([1, 3])
     with col1:
         if st.button("View Details", use_container_width=True):
-            st.session_state.selected_subject = selected
+            chosen = paginated_subjects[selected_idx]
+            st.session_state.selected_subject = chosen['subject_id']
+            st.session_state.selected_subject_dataset = chosen.get('dataset_id')
             st.session_state.current_page = 'subject_detail'
             st.rerun()
     
@@ -3702,9 +3720,10 @@ def render_manual_qc_tab(qc_mgr):
                 unsafe_allow_html=True)
     
     if subjects:
-        from src.utils import create_subject_dataframe
+        from src.utils import create_subject_dataframe, enrich_subjects_for_display
+        enrich_subjects_for_display(subjects, st.session_state.db)
         df = create_subject_dataframe(subjects)
-        
+
         # Display table
         st.dataframe(
             df,
@@ -4273,9 +4292,10 @@ def display_session_scans(session_id, scans, subject_id, platform=None, dataset_
             from src.utils import format_file_size
             
             if use_db_scans:
-                # Database scans (cloud datasets)
-                file_size = scan.get('file_size', 0)
-                is_stub = scan.get('download_status') != 'completed'
+                # Database scans (cloud + multi-dataset browse). Column names
+                # come straight from the scans table.
+                file_size = scan.get('file_size_bytes', scan.get('file_size', 0))
+                is_stub = not scan.get('is_downloaded')
                 scan_id = scan.get('id')
             else:
                 # BIDS loader scans (local datasets)
@@ -4518,8 +4538,12 @@ def page_subject_detail():
             st.session_state.current_page = 'subjects'
             st.rerun()
     
-    # Get subject data
-    subject = st.session_state.db.get_subject(subject_id)
+    # Get subject data (dataset-scoped when we know which dataset was opened,
+    # so a label shared across datasets resolves to the right subject).
+    detail_dataset_id = st.session_state.get('selected_subject_dataset')
+    subject = st.session_state.db.get_subject(subject_id, dataset_id=detail_dataset_id)
+    if not subject:
+        subject = st.session_state.db.get_subject(subject_id)
     if not subject:
         st.error("Subject not found")
         return
@@ -4573,18 +4597,12 @@ def page_subject_detail():
     )
     
     # Session scans - Dynamic session support
-    if not st.session_state.bids_loader:
-        st.warning("BIDS loader not initialized")
-        return
-    
     # Get dataset info
     dataset_id = subject.get('dataset_id')
-    
-    # Determine if using database scans (cloud) or BIDS loader (local)
-    use_db_scans = False
+
     platform = None
     dataset_remote_id = None
-    
+
     if dataset_id:
         dataset_info = st.session_state.db.execute_query(
             "SELECT platform, dataset_id_external FROM datasets WHERE id = ?",
@@ -4594,33 +4612,41 @@ def page_subject_detail():
         if dataset_info and len(dataset_info) > 0:
             platform = dataset_info[0][0]
             dataset_remote_id = dataset_info[0][1]
-            use_db_scans = platform in ['pennsieve', 'openneuro', 'dandi']
-    
-    # Get all sessions for subject (dynamic)
+
+    # Use the BIDS loader only for the local dataset it was actually opened on;
+    # for every other dataset (and whenever no loader is active, e.g. the
+    # multi-dataset browse flow) read scans from the database instead. All
+    # scans are indexed in the DB, so the loader is an optional local-file path,
+    # not a requirement.
+    loader = st.session_state.get('bids_loader')
+    use_db_scans = (platform != 'local') or (loader is None)
+
+    # Get all sessions for subject (dynamic), scoped to this dataset
     all_sessions = []
-    
+
     if use_db_scans:
-        # Cloud datasets: query subject_sessions table
         sessions_info = st.session_state.db.get_subject_sessions(subject_id, dataset_id)
         all_sessions = [s['session_id'] for s in sessions_info if s.get('scan_count', 0) > 0]
-        
-        # Fallback: extract from scans table if subject_sessions empty
+
+        # Fallback: derive sessions from the dataset-scoped scans table
         if not all_sessions:
-            all_scans = st.session_state.db.get_subject_scans(subject_id)
-            all_sessions = list(set(scan.get('session') for scan in all_scans if scan.get('session')))
+            all_scans = st.session_state.db.get_scans_by_subject(subject_id, dataset_id=dataset_id)
+            all_sessions = sorted({scan.get('session') for scan in all_scans if scan.get('session')})
     else:
-        # Local datasets: use BIDS loader
-        all_sessions = st.session_state.bids_loader.get_sessions(subject_id)
-    
+        all_sessions = loader.get_sessions(subject_id)
+
     # Display each session dynamically
     if all_sessions:
         for session_id in sorted(all_sessions):
             # Get scans for this session
             if use_db_scans:
-                scans = st.session_state.db.get_subject_scans(subject_id, session_id)
+                scans = [
+                    s for s in st.session_state.db.get_scans_by_subject(subject_id, dataset_id=dataset_id)
+                    if s.get('session') == session_id
+                ]
             else:
-                scans = st.session_state.bids_loader.get_subject_scans(subject_id, session_id)
-            
+                scans = loader.get_subject_scans(subject_id, session_id)
+
             # Display session using helper function
             display_session_scans(session_id, scans, subject_id, platform, dataset_remote_id, use_db_scans)
     else:
@@ -5145,7 +5171,15 @@ def page_viewer():
                 selected_scan_idx = None
                 selected_dataset = None
                 if selected_session_id and selected_subject_id and selected_dataset_id:
-                    scans = st.session_state.db.get_subject_scans(selected_subject_id, selected_session_id)
+                    # Scope to the selected dataset: a BIDS label like 'sub-01'
+                    # can exist in several datasets, and an unscoped lookup would
+                    # resolve to another dataset's (possibly undownloaded) file.
+                    scans = [
+                        s for s in st.session_state.db.get_scans_by_subject(
+                            selected_subject_id, dataset_id=selected_dataset_id
+                        )
+                        if s.get('session') == selected_session_id
+                    ]
                     selected_dataset = next((d for d in all_datasets if d['id'] == selected_dataset_id), None)
                     is_openneuro = selected_dataset and selected_dataset.get('platform') == 'openneuro'
                     
