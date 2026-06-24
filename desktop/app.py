@@ -135,6 +135,35 @@ def health_url(port: int) -> str:
     return f"http://localhost:{port}/_stcore/health"
 
 
+def setup_logging() -> None:
+    """Log to stderr and, once a data dir is known, to a rotating file.
+
+    A windowed build (console=False) has no terminal, so the file under
+    ``<data_dir>/logs/desktop.log`` is the only diagnostic trail. Best-effort:
+    if the data dir can't be resolved/created yet, fall back to stderr only.
+    """
+    from logging.handlers import RotatingFileHandler
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+
+    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+        stream = logging.StreamHandler()
+        stream.setFormatter(fmt)
+        root.addHandler(stream)
+
+    try:
+        from src.app_paths import data_dir
+        log_dir = data_dir() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(log_dir / "desktop.log", maxBytes=1_000_000, backupCount=3)
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+    except Exception:
+        pass  # stderr-only is acceptable
+
+
 # --------------------------------------------------------------------------- #
 # Server role
 # --------------------------------------------------------------------------- #
@@ -218,6 +247,7 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
     from desktop.bootstrap import bootstrap
 
     info = bootstrap()
+    setup_logging()  # now BIDSHUB_DATA_DIR is set -> log under the data dir
     logger.info("Data dir: %s", info["data_dir"])
 
     port = port or find_free_port()
@@ -264,11 +294,10 @@ def main(argv: Optional[list] = None) -> int:
                         help="launcher: run the server without opening a window")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-
     if args.role == "server":
         if args.port is None:
             parser.error("--role=server requires --port")
+        setup_logging()  # env (incl. BIDSHUB_DATA_DIR) is inherited from launcher
         run_server(args.port)
         return 0
 
