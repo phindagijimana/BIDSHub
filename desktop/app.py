@@ -86,6 +86,40 @@ def streamlit_flag_options(port: int) -> dict:
     }
 
 
+def streamlit_env(port: int) -> dict:
+    """Environment overrides that pin the server's behaviour deterministically.
+
+    Streamlit env vars are honoured during config init, *before* any stray
+    ``.streamlit/config.toml`` in the working directory is applied — and a repo
+    checkout's config.toml pins ``server.port = 8501``, which would otherwise
+    override our chosen port. Setting browser.serverPort too keeps the URL it
+    prints (and any client-side calls) on our port.
+    """
+    return {
+        "STREAMLIT_SERVER_PORT": str(port),
+        "STREAMLIT_BROWSER_SERVER_PORT": str(port),
+        "STREAMLIT_SERVER_ADDRESS": "localhost",
+        "STREAMLIT_BROWSER_SERVER_ADDRESS": "localhost",
+        "STREAMLIT_SERVER_HEADLESS": "true",
+        "STREAMLIT_SERVER_FILE_WATCHER_TYPE": "none",
+        "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+        "STREAMLIT_GLOBAL_DEVELOPMENT_MODE": "false",
+    }
+
+
+def server_cwd() -> str:
+    """Working dir for the server child.
+
+    The per-user data dir, deliberately *not* a repo checkout: it has no
+    ``.streamlit/config.toml`` to override our settings, and keeps the embedded
+    server isolated from the source tree.
+    """
+    from src.app_paths import data_dir
+    d = data_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return str(d)
+
+
 def server_command(port: int) -> list:
     """Argv that re-execs this entry point in server role.
 
@@ -107,6 +141,10 @@ def health_url(port: int) -> str:
 
 def run_server(port: int) -> None:
     """Run the Streamlit server in-process (blocks). Child-process main thread."""
+    # Pin behaviour via env *before* importing streamlit (config reads env at
+    # init, and env beats a stray working-dir config.toml).
+    os.environ.update(streamlit_env(port))
+
     from streamlit import config as st_config
     from streamlit.web import bootstrap as st_bootstrap
 
@@ -142,10 +180,24 @@ def wait_for_health(port: int, timeout: float = 60.0, interval: float = 0.4) -> 
 
 
 def spawn_server(port: int) -> subprocess.Popen:
-    """Launch the server child, inheriting env (incl. BIDSHUB_DATA_DIR)."""
+    """Launch the server child with a pinned port and an isolated working dir.
+
+    Env carries BIDSHUB_DATA_DIR (so the child resolves the same paths) plus the
+    Streamlit overrides; cwd is the data dir so no repo config.toml interferes.
+    """
     cmd = server_command(port)
-    logger.info("Spawning server: %s", " ".join(cmd))
-    return subprocess.Popen(cmd, env=os.environ.copy())
+    env = os.environ.copy()
+    env.update(streamlit_env(port))
+    # In dev the child runs `-m desktop.app` from the data dir (not the repo),
+    # so the repo must be importable via PYTHONPATH. Frozen builds re-exec the
+    # binary directly and need none of this.
+    if not getattr(sys, "frozen", False):
+        repo_root = str(Path(__file__).resolve().parent.parent)
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = repo_root + (os.pathsep + existing if existing else "")
+    cwd = server_cwd()
+    logger.info("Spawning server on port %s (cwd=%s): %s", port, cwd, " ".join(cmd))
+    return subprocess.Popen(cmd, env=env, cwd=cwd)
 
 
 def open_window(port: int, title: str = APP_TITLE) -> None:
@@ -224,4 +276,6 @@ def main(argv: Optional[list] = None) -> int:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()  # safe no-op unless frozen + multiprocessing
     sys.exit(main())

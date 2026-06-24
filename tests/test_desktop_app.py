@@ -63,6 +63,24 @@ def test_streamlit_flag_options_are_desktop_safe():
     assert opts["browser.gatherUsageStats"] is False
 
 
+def test_streamlit_env_pins_port_via_env():
+    # Env overrides are what actually win over a stray working-dir config.toml.
+    env = dapp.streamlit_env(8533)
+    assert env["STREAMLIT_SERVER_PORT"] == "8533"
+    assert env["STREAMLIT_BROWSER_SERVER_PORT"] == "8533"
+    assert env["STREAMLIT_SERVER_HEADLESS"] == "true"
+    assert env["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] == "none"
+
+
+def test_server_cwd_is_the_data_dir(monkeypatch, tmp_path):
+    # cwd must be the per-user data dir (no repo .streamlit/config.toml there).
+    target = tmp_path / "BIDSHub"
+    monkeypatch.setenv("BIDSHUB_DATA_DIR", str(target))
+    cwd = dapp.server_cwd()
+    assert cwd == str(target)
+    assert (target).is_dir()
+
+
 def test_app_script_path_points_at_app_py():
     p = Path(dapp.app_script_path())
     assert p.name == "app.py"
