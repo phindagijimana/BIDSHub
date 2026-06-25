@@ -27,8 +27,10 @@ jobs:
       matrix:
         include:
           - { os: macos-14, label: macos-arm64 }
-          - { os: macos-13, label: macos-x86_64 }
           - { os: windows-latest, label: windows-x86_64 }
+          # macos-13 (Intel) is omitted: those runners queue for hours on this
+          # account and would block the release job. Add back (or build a
+          # universal2 binary) once Intel-Mac support is needed.
     steps:
       - uses: actions/checkout@v4
 
