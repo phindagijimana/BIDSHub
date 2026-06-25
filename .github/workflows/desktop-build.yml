@@ -81,12 +81,17 @@ jobs:
             --key /tmp/api_key.p8 --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
           NOTARY_PROFILE=bidshub-notary bash packaging/sign_macos.sh
 
+      # Only upload installers when they'll actually be consumed (a real release
+      # tag or a manual dispatch). Dry-run "-rc" tags just validate build+smoke,
+      # so we skip the upload — which also avoids burning Actions artifact-storage
+      # quota on every CI exercise.
       - name: Upload macOS artifact
-        if: runner.os == 'macOS'
+        if: ${{ runner.os == 'macOS' && (github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: BIDSHub-${{ matrix.label }}
           path: dist/BIDSHub.dmg
+          retention-days: 14
 
       # ---- Windows deliverable ----
       - name: Install Inno Setup (Windows)
@@ -98,11 +103,12 @@ jobs:
         run: iscc packaging\windows_installer.iss
 
       - name: Upload Windows artifact
-        if: runner.os == 'Windows'
+        if: ${{ runner.os == 'Windows' && (github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: BIDSHub-${{ matrix.label }}
           path: dist/BIDSHub-Setup.exe
+          retention-days: 14
 
   release:
     needs: build
