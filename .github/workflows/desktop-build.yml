@@ -1,11 +1,23 @@
 name: Desktop build
 
-# Builds the packaged desktop app per OS, smoke-tests the frozen bundle, and
-# uploads installers as artifacts. Runs on version tags and on demand.
+# Builds the desktop app for each OS/arch, smoke-tests the frozen bundle, and
+# (on tags) publishes signed installers as a GitHub Release.
+#
+# Signing is opt-in: set repo variable SIGN_RELEASES=true and provide the
+# macOS secrets (MACOS_CERT_P12, MACOS_CERT_PASSWORD, MACOS_KEYCHAIN_PASSWORD,
+# APPLE_DEVELOPER_ID, APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_API_KEY).
 on:
   workflow_dispatch:
+    inputs:
+      sign:
+        description: "Codesign + notarize the macOS build"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
+
+permissions:
+  contents: write   # the release job creates a GitHub Release
 
 jobs:
   build:
@@ -13,12 +25,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - { os: macos-14, label: macos-arm64 }
+          - { os: macos-13, label: macos-x86_64 }
+          - { os: windows-latest, label: windows-x86_64 }
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -38,30 +52,78 @@ jobs:
       - name: Smoke-test frozen bundle
         run: python packaging/smoke_test.py
 
-      # ---- macOS: .dmg (signing/notarization happen on a machine with certs) ----
+      # ---- macOS deliverable ----
       - name: Build .dmg (macOS)
         if: runner.os == 'macOS'
         run: bash packaging/make_dmg.sh
+
+      - name: Sign + notarize (macOS)
+        if: ${{ runner.os == 'macOS' && vars.SIGN_RELEASES == 'true' }}
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          DEVELOPER_ID_APP: ${{ secrets.APPLE_DEVELOPER_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          # Import the signing cert into a throwaway keychain.
+          echo "$MACOS_CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          # notarytool credentials from an App Store Connect API key.
+          echo "$APPLE_API_KEY" | base64 --decode > /tmp/api_key.p8
+          xcrun notarytool store-credentials bidshub-notary \
+            --key /tmp/api_key.p8 --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
+          NOTARY_PROFILE=bidshub-notary bash packaging/sign_macos.sh
 
       - name: Upload macOS artifact
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: BIDSHub-macos-dmg
+          name: BIDSHub-${{ matrix.label }}
           path: dist/BIDSHub.dmg
 
-      # ---- Windows: Inno Setup installer ----
+      # ---- Windows deliverable ----
       - name: Install Inno Setup (Windows)
         if: runner.os == 'Windows'
         run: choco install innosetup --no-progress -y
 
       - name: Build installer (Windows)
         if: runner.os == 'Windows'
-        run: iscc packaging/windows_installer.iss
+        run: iscc packaging\windows_installer.iss
 
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: BIDSHub-windows-setup
+          name: BIDSHub-${{ matrix.label }}
           path: dist/BIDSHub-Setup.exe
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name '*.dmg' -o -name '*.exe' \) -exec sha256sum {} \; > ../SHA256SUMS
+          cat ../SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            SHA256SUMS
+          generate_release_notes: true

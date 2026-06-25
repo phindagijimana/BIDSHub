@@ -38,5 +38,27 @@ Sign with `signtool` and an Authenticode certificate for SmartScreen trust.
 - The server runs as a child process (`--role=server`); the launcher opens the
   window. Port is pinned via `STREAMLIT_SERVER_PORT` so a stray
   `.streamlit/config.toml` can't override it.
+- Single instance: a `<data_dir>/.desktop.lock` records the running port; a
+  second launch focuses the existing instance instead of starting another.
+- DB upgrades: `desktop/migrations.py` applies versioned, recorded migrations on
+  every launch (append-only registry). Add future schema changes there.
 - Logs: `<data_dir>/logs/desktop.log` (windowed builds have no console).
 - Bundle size is ~500 MB+ (scientific stack: numpy/pandas/nibabel/pybids/...).
+
+## Production readiness
+
+Ready: per-user data dir + versioned migrations, deterministic server port,
+single-instance guard, frozen-bundle smoke test, icons, .dmg/.exe packaging,
+hardened-runtime entitlements, per-OS/arch build CI with a tagged release job.
+
+Before public distribution you still need:
+- **Signing/notarization** — set repo var `SIGN_RELEASES=true` and the Apple
+  secrets (see `.github/workflows/desktop-build.yml`); unsigned apps are blocked
+  by Gatekeeper / warned by SmartScreen.
+- **A green CI run** — the workflow has not been executed yet; the first run on
+  Windows / Intel macOS may surface PyInstaller hidden-import gaps.
+
+Deferred (intentionally out of scope for v1):
+- In-place auto-update (Sparkle/Squirrel) — current behaviour is notify-and-link.
+- OS keychain storage for platform credentials (today: in-app entry / `.env`).
+- Dependency-license aggregation and any data-handling/compliance review.

@@ -25,6 +25,7 @@ Run in development::
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import socket
@@ -193,19 +194,66 @@ def run_server(port: int) -> None:
 # Launcher role
 # --------------------------------------------------------------------------- #
 
+def health_ok(port: int) -> bool:
+    """One-shot health probe of the Streamlit server on ``port``."""
+    try:
+        with urllib.request.urlopen(health_url(port), timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def wait_for_health(port: int, timeout: float = 60.0, interval: float = 0.4) -> bool:
     """Poll the Streamlit health endpoint until ready or timeout."""
     deadline = time.monotonic() + timeout
-    url = health_url(port)
     while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
-                if resp.status == 200:
-                    return True
-        except Exception:
-            pass
+        if health_ok(port):
+            return True
         time.sleep(interval)
     return False
+
+
+# --- single-instance lock --------------------------------------------------
+
+def lock_path(data_dir: str) -> Path:
+    return Path(data_dir) / ".desktop.lock"
+
+
+def write_lock(data_dir: str, port: int) -> None:
+    try:
+        lock_path(data_dir).write_text(json.dumps({"pid": os.getpid(), "port": port}))
+    except OSError:
+        pass
+
+
+def read_lock(data_dir: str) -> Optional[dict]:
+    try:
+        return json.loads(lock_path(data_dir).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def clear_lock(data_dir: str) -> None:
+    try:
+        lock_path(data_dir).unlink()
+    except OSError:
+        pass
+
+
+def running_instance_port(data_dir: str, health_check=health_ok) -> Optional[int]:
+    """Port of an already-running instance, or None.
+
+    Reads the lock file and confirms the recorded port is actually serving — a
+    stale lock (crash, reboot) fails the health check and is ignored, so we
+    don't refuse to start over a dead instance.
+    """
+    info = read_lock(data_dir)
+    if not info:
+        return None
+    port = info.get("port")
+    if isinstance(port, int) and health_check(port):
+        return port
+    return None
 
 
 def spawn_server(port: int) -> subprocess.Popen:
@@ -249,6 +297,18 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
     info = bootstrap()
     setup_logging()  # now BIDSHUB_DATA_DIR is set -> log under the data dir
     logger.info("Data dir: %s", info["data_dir"])
+    data_dir = info["data_dir"]
+
+    # Single instance: if one is already serving, focus it instead of starting
+    # a second server (which would bind another port and open a second window).
+    existing = running_instance_port(data_dir)
+    if existing is not None:
+        logger.info("BIDSHub already running on port %s; reusing it", existing)
+        if open_gui:
+            open_window(existing)
+        else:
+            print(f"BIDSHub already running at http://localhost:{existing}")
+        return 0
 
     port = port or find_free_port()
     proc = spawn_server(port)
@@ -258,6 +318,7 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
             proc.terminate()
             return 1
         logger.info("BIDSHub ready at http://localhost:%s", port)
+        write_lock(data_dir, port)
         _check_updates_async()
 
         if open_gui:
@@ -269,6 +330,7 @@ def launch(open_gui: bool = True, port: Optional[int] = None) -> int:
             except KeyboardInterrupt:
                 pass
     finally:
+        clear_lock(data_dir)
         _terminate(proc)
     return 0
 

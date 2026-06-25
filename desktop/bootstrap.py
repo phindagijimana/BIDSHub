@@ -64,17 +64,17 @@ def _platform_constraint_current(db_path: str) -> bool:
 
 
 def ensure_database() -> str:
-    """Create the database on first run and bring it to the current schema.
+    """Create the database on first run and migrate it to the current schema.
 
     - If the DB file is missing, initialise it with the canonical schema.
-    - Always ensure the datasets platform constraint includes ``hpc`` and
-      ``remote_server`` (the v3.1.1 set), applying that migration once if a
-      pre-existing DB predates it.
+    - Apply any pending versioned migrations (recorded in ``schema_migrations``)
+      so a database created by an older release upgrades cleanly.
 
-    Returns the resolved database path. Idempotent: on an up-to-date DB it does
-    no writes beyond the cheap schema check.
+    Returns the resolved database path. Idempotent: a fully-migrated DB runs no
+    migrations.
     """
     from src.app_paths import db_path as resolve_db_path
+    from desktop.migrations import apply_pending
 
     db_path = resolve_db_path()
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -85,10 +85,9 @@ def ensure_database() -> str:
         if not init_database(db_path):
             raise RuntimeError(f"Failed to initialise database at {db_path}")
 
-    if not _platform_constraint_current(db_path):
-        logger.info("Migrating datasets platform constraint (adding hpc/remote_server)")
-        from scripts.add_hpc_remote_platforms import migrate_database
-        migrate_database(db_path)
+    newly = apply_pending(db_path)
+    if newly:
+        logger.info("Applied migrations: %s", ", ".join(newly))
 
     return db_path
 

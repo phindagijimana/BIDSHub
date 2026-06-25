@@ -2,6 +2,11 @@
 ; Build on Windows after `pyinstaller packaging\bidshub.spec` produces
 ; dist\BIDSHub\ (onedir).  Compile with:  iscc packaging\windows_installer.iss
 ; Output: dist\BIDSHub-Setup.exe
+;
+; Runtime requirement: pywebview uses the Microsoft Edge WebView2 runtime,
+; present on Windows 11 and current Windows 10. For older machines, bundle the
+; Evergreen bootstrapper (MicrosoftEdgeWebview2Setup.exe) and add a [Run] entry
+; to install it, or document it as a prerequisite.
 
 #define AppName "BIDSHub"
 #define AppVersion "3.1.1"
