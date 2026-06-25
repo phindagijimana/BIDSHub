@@ -49,9 +49,15 @@ hiddenimports += collect_submodules("scripts")
 hiddenimports += ["dotenv"]
 
 # --- heavy / data-bearing third-party libs ---------------------------------
+# NB: dandi pulls in dandischema/pynwb/hdmf/nwbinspector/bidsschematools, which
+# ship JSON schema/resource files (e.g. dandischema/_resources/spdx_license_ids.json).
+# collect_all('dandi') does NOT collect its dependencies' data, so without these
+# `import dandi` raises FileNotFoundError in the frozen app and DANDI validation
+# and sync silently fail. Collect the whole cluster's data.
 THIRD_PARTY = [
     "streamlit", "bids", "nibabel", "pennsieve", "dandi", "xnat",
     "openneuro", "boto3", "paramiko", "pandas", "numpy", "requests",
+    "dandischema", "pynwb", "hdmf", "nwbinspector", "bidsschematools",
 ]
 for pkg in THIRD_PARTY:
     try:

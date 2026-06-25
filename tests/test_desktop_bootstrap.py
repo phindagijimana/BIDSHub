@@ -42,6 +42,17 @@ def test_prepare_environment_sets_and_creates_dir(clean_env, monkeypatch):
     assert target.is_dir()
 
 
+def test_prepare_environment_writes_navy_theme(clean_env):
+    # The embedded server reads .streamlit/config.toml from the data dir (its
+    # cwd); without the navy primaryColor the app shows Streamlit's red accent.
+    tmp = tempfile.mkdtemp()
+    target = Path(tmp) / "BIDSHub"
+    boot.prepare_environment(str(target))
+    cfg = target / ".streamlit" / "config.toml"
+    assert cfg.exists()
+    assert 'primaryColor = "#002d72"' in cfg.read_text()
+
+
 def test_prepare_environment_respects_existing_env(clean_env, monkeypatch):
     tmp = tempfile.mkdtemp()
     monkeypatch.setenv("BIDSHUB_DATA_DIR", tmp)

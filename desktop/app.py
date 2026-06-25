@@ -110,6 +110,9 @@ def streamlit_env(port: int) -> dict:
         "STREAMLIT_SERVER_HEADLESS": "true",
         "STREAMLIT_SERVER_FILE_WATCHER_TYPE": "none",
         "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+        # The navy brand theme is applied via a config.toml written into the data
+        # dir (the server's cwd) by desktop.bootstrap — theme env vars don't take
+        # effect, but a cwd .streamlit/config.toml does.
         # NB: do NOT set STREAMLIT_GLOBAL_DEVELOPMENT_MODE here — Streamlit parses
         # bool env vars by truthiness, so the string "false" becomes True and
         # would force development mode ON. developmentMode is pinned off via

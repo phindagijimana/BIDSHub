@@ -83,6 +83,8 @@ def test_streamlit_env_pins_port_via_env():
     assert env["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] == "none"
 
 
+
+
 def test_server_cwd_is_the_data_dir(monkeypatch, tmp_path):
     # cwd must be the per-user data dir (no repo .streamlit/config.toml there).
     target = tmp_path / "BIDSHub"

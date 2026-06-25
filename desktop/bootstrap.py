@@ -43,8 +43,34 @@ def prepare_environment(data_dir: Optional[str] = None) -> Path:
         os.environ["BIDSHUB_DATA_DIR"] = str(platform_data_dir())
 
     resolved = ensure_data_dir()
+    _write_streamlit_theme(resolved)
     logger.info("BIDSHub data directory: %s", resolved)
     return resolved
+
+
+# The embedded server runs with cwd = the data dir, so it reads .streamlit/
+# config.toml from there (not the bundle). Without it the app uses Streamlit's
+# default RED accent for radios/checkboxes/sliders. No [server] port here — the
+# port is pinned via env so a config value can't override it.
+_THEME_CONFIG = """\
+[theme]
+primaryColor = "#002d72"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[server]
+maxMessageSize = 3000
+"""
+
+
+def _write_streamlit_theme(data_dir: Path) -> None:
+    try:
+        cfg = Path(data_dir) / ".streamlit" / "config.toml"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text(_THEME_CONFIG)
+    except OSError:
+        pass  # theme is cosmetic; never fail startup over it
 
 
 def _platform_constraint_current(db_path: str) -> bool:
