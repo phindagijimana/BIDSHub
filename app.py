@@ -5416,7 +5416,7 @@ def page_viewer():
                     const nv = new niivue.Niivue({{
                         show3Dcrosshair: true,
                         backColor: [0, 0, 0, 1],
-                        crosshairColor: [1, 0, 0, 1],
+                        crosshairColor: [0, 0.176, 0.447, 1],
                         textHeight: 0.05,
                         colorbarHeight: 0.05
                     }});
@@ -5436,8 +5436,7 @@ def page_viewer():
                     
                     nv.loadVolumes(volumeList).then(() => {{
                         nv.setSliceType(nv.sliceTypeMultiplanar);
-                        nv.setClipPlane([0, 0, 90]);
-                        
+
                         // Ensure canvas fills and renders properly
                         setTimeout(() => {{
                             nv.drawScene();
