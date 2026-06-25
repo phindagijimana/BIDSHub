@@ -509,43 +509,51 @@ class Database:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            # Get old status for history
-            cursor.execute("SELECT qc_status FROM subjects WHERE subject_id = ?", 
-                         (subject_id,))
+            # Resolve the subject's primary key. qc_history.subject_id is an
+            # INTEGER FK to subjects.id, NOT the BIDS label — inserting the label
+            # there fails the foreign-key constraint and aborts the whole update.
+            cursor.execute(
+                "SELECT id, qc_status FROM subjects WHERE subject_id = ? LIMIT 1",
+                (subject_id,),
+            )
             row = cursor.fetchone()
-            old_status = row['qc_status'] if row else None
-            
-            # Update subject
+            if not row:
+                print(f"Error updating QC: subject {subject_id} not found")
+                return False
+            sub_pk = row['id']
+            old_status = row['qc_status']
+
+            # Update subject (scoped to the resolved row)
             update_fields = ["qc_status = ?", "last_updated = ?"]
             params = [qc_status, datetime.now()]
-            
+
             if notes is not None:
                 update_fields.append("qc_notes = ?")
                 params.append(notes)
-            
+
             if reviewed_by is not None:
                 update_fields.append("qc_reviewed_by = ?")
                 update_fields.append("qc_reviewed_date = ?")
                 params.extend([reviewed_by, datetime.now()])
-            
+
             if flagged is not None:
                 update_fields.append("flagged = ?")
                 params.append(flagged)
-            
-            params.append(subject_id)
-            
+
+            params.append(sub_pk)
+
             cursor.execute(f"""
-                UPDATE subjects 
+                UPDATE subjects
                 SET {', '.join(update_fields)}
-                WHERE subject_id = ?
+                WHERE id = ?
             """, params)
-            
-            # Add to QC history
+
+            # Add to QC history (subject_id is the integer FK to subjects.id)
             cursor.execute("""
-                INSERT INTO qc_history 
+                INSERT INTO qc_history
                 (subject_id, old_status, new_status, notes, reviewed_by, reviewed_date)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (subject_id, old_status, qc_status, notes, reviewed_by, datetime.now()))
+            """, (sub_pk, old_status, qc_status, notes, reviewed_by, datetime.now()))
             
             conn.commit()
             return True
