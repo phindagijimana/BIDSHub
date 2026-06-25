@@ -14,7 +14,17 @@
 
 ## Quick start
 
-**Native (recommended):** Python on the host; one database under `./data` (not containerized in this path).
+**Desktop app (no Python needed):** download the installer for your OS from the
+[latest release](https://github.com/phindagijimana/BIDSHub/releases/latest) —
+`BIDSHub.dmg` (macOS) or `BIDSHub-Setup.exe` (Windows) — and open it. Your data
+lives in a per-user folder (`~/Library/Application Support/BIDSHub` on macOS,
+`%APPDATA%\BIDSHub` on Windows).
+
+> Until the app is code-signed, the OS shows an "unidentified developer" warning
+> on first launch. macOS: right-click the app → **Open** → **Open**. Windows:
+> **More info** → **Run anyway**.
+
+**Native (recommended for developers):** Python on the host; one database under `./data` (not containerized in this path).
 
 ```bash
 git clone https://github.com/phindagijimana/BIDSHub.git
