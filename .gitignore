@@ -130,3 +130,6 @@ docs/PRODUCTION_ROADMAP.md
 /RELEASING.md
 /SECURITY.md
 docs/*.md
+
+# Claude Code local tooling state (permission cache, etc.)
+.claude/
