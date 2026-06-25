@@ -2000,7 +2000,9 @@ def page_manage_datasets():
                             st.success(f"Dataset '{dataset_name}' added successfully!")
                             
                             # For local datasets, index subjects immediately
-                            if data_location_mode == 'local' and root_path:
+                            # (this Add form only offers remote/cloud platforms, so
+                            # this branch is normally skipped; cloud datasets sync below)
+                            if new_platform == 'local' and root_path:
                                 with st.spinner("Indexing local BIDS dataset..."):
                                     try:
                                         from src.bids_loader import BIDSLoader
@@ -2051,45 +2053,18 @@ def page_manage_datasets():
                                             indexed_count += 1
                                         
                                         st.success(f"Indexed {indexed_count} subjects from local dataset")
-                                        
-                                        # Next steps for local datasets
-                                        st.markdown("**What's next?**")
-                                        col1, col2 = st.columns(2)
-                                        
-                                        with col1:
-                                            if st.button("Browse Subjects", type="primary", use_container_width=True, key="goto_subjects_local"):
-                                                st.session_state.current_page = 'subjects'
-                                                st.rerun()
-                                        
-                                        with col2:
-                                            if st.button("View Dashboard", use_container_width=True, key="goto_dashboard_local"):
-                                                st.session_state.current_page = 'dashboard'
-                                                st.rerun()
-                                        
+                                        # Nav buttons can't live inside st.form(); guide via the sidebar.
+                                        st.markdown("**Next:** open **Browse Subjects** from the sidebar to review the indexed subjects.")
                                     except Exception as e:
                                         st.error(f"Error indexing local dataset: {str(e)}")
                                         st.warning("Dataset added but subjects not indexed. Check BIDS structure.")
                             else:
-                                # Cloud dataset - needs sync
-                                st.info("For cloud datasets, go to 'Subjects' page and click 'Sync Subjects' to fetch metadata from the platform.")
-                                
-                                # Next steps for cloud datasets
-                                st.markdown("**What's next?**")
-                                col1, col2, col3 = st.columns(3)
-                                
-                                with col1:
-                                    if st.button("Sync Subjects", type="primary", use_container_width=True, key="goto_subjects_cloud"):
-                                        st.session_state.current_page = 'subjects'
-                                        st.rerun()
-                                
-                                with col2:
-                                    if st.button("View Dashboard", use_container_width=True, key="goto_dashboard_cloud"):
-                                        st.session_state.current_page = 'dashboard'
-                                        st.rerun()
-                                
-                                with col3:
-                                    if st.button("Manage Datasets", use_container_width=True, key="goto_manage_cloud"):
-                                        st.rerun()
+                                # Cloud dataset - needs sync. Nav buttons can't live
+                                # inside st.form(); guide the user to the Sync action.
+                                st.info(
+                                    "Dataset added. Expand it under **Connected Datasets** above "
+                                    "and click **Sync** to fetch its subjects from the platform."
+                                )
                         else:
                             st.error("Failed to add dataset. Check database connection.")
 
