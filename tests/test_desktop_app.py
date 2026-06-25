@@ -96,3 +96,31 @@ def test_wait_for_health_times_out_quickly():
     ok = dapp.wait_for_health(59999, timeout=1.0, interval=0.2)
     assert ok is False
     assert time.monotonic() - start < 5.0
+
+
+def test_lock_roundtrip_and_clear(tmp_path):
+    d = str(tmp_path)
+    assert dapp.read_lock(d) is None
+    dapp.write_lock(d, 8533)
+    info = dapp.read_lock(d)
+    assert info["port"] == 8533 and "pid" in info
+    dapp.clear_lock(d)
+    assert dapp.read_lock(d) is None
+
+
+def test_running_instance_port_when_healthy(tmp_path):
+    d = str(tmp_path)
+    dapp.write_lock(d, 8533)
+    # Injected health check says the recorded port is alive.
+    assert dapp.running_instance_port(d, health_check=lambda p: True) == 8533
+
+
+def test_running_instance_port_ignores_stale_lock(tmp_path):
+    d = str(tmp_path)
+    dapp.write_lock(d, 8533)
+    # Recorded port no longer serving -> treat as stale, allow a fresh start.
+    assert dapp.running_instance_port(d, health_check=lambda p: False) is None
+
+
+def test_running_instance_port_none_without_lock(tmp_path):
+    assert dapp.running_instance_port(str(tmp_path), health_check=lambda p: True) is None
