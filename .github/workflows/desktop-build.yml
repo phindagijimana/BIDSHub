@@ -106,7 +106,10 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    # Only publish for final tags (vX.Y.Z). Prerelease/dry-run tags that contain
+    # a hyphen (e.g. v3.1.1-rc1) still build + smoke-test on every platform but
+    # do not create a GitHub Release.
+    if: ${{ startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
