@@ -46,6 +46,23 @@ def health_ok(port: int) -> bool:
         return False
 
 
+def frontend_ok(port: int) -> bool:
+    """The root URL must serve the actual app HTML, not a 404.
+
+    /_stcore/health returns 200 even when Streamlit (mis)detects development
+    mode in a frozen bundle and serves "/" from a non-existent Node dev server.
+    This catches that: the app's index.html must come back.
+    """
+    try:
+        with urllib.request.urlopen(f"http://localhost:{port}/", timeout=4) as r:
+            if r.status != 200:
+                return False
+            body = r.read(4000).decode("utf-8", errors="ignore").lower()
+            return "streamlit" in body or "<!doctype html" in body
+    except Exception:
+        return False
+
+
 def main() -> int:
     binary = find_binary(sys.argv[1] if len(sys.argv) > 1 else None)
     data_dir = Path(tempfile.mkdtemp()) / "BIDSHub"
@@ -77,6 +94,11 @@ def main() -> int:
             print(f"[smoke] FAIL: health check failed on port {port}")
             return 1
         print(f"[smoke] health OK on port {port}")
+
+        if not frontend_ok(port):
+            print(f"[smoke] FAIL: root URL did not serve the app (frozen dev-mode / missing static?)")
+            return 1
+        print("[smoke] frontend served OK")
 
         db = data_dir / "bidshub.db"
         if not db.exists():

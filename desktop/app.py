@@ -84,6 +84,12 @@ def streamlit_flag_options(port: int) -> dict:
         "server.runOnSave": False,
         "browser.gatherUsageStats": False,
         "client.toolbarMode": "minimal",
+        # Critical for frozen builds: Streamlit infers "development mode" when its
+        # package isn't under site-packages (always true in a PyInstaller bundle)
+        # and then proxies the frontend to a non-existent Node dev server -> the
+        # app serves 404 at "/". Force it off so it serves the bundled static
+        # frontend. flag_options take precedence over the bad auto-detection.
+        "global.developmentMode": False,
     }
 
 
@@ -104,7 +110,10 @@ def streamlit_env(port: int) -> dict:
         "STREAMLIT_SERVER_HEADLESS": "true",
         "STREAMLIT_SERVER_FILE_WATCHER_TYPE": "none",
         "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
-        "STREAMLIT_GLOBAL_DEVELOPMENT_MODE": "false",
+        # NB: do NOT set STREAMLIT_GLOBAL_DEVELOPMENT_MODE here — Streamlit parses
+        # bool env vars by truthiness, so the string "false" becomes True and
+        # would force development mode ON. developmentMode is pinned off via
+        # flag_options in streamlit_flag_options() instead.
     }
 
 

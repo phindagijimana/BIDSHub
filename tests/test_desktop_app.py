@@ -61,6 +61,17 @@ def test_streamlit_flag_options_are_desktop_safe():
     assert opts["server.headless"] is True
     assert opts["server.fileWatcherType"] == "none"   # no watchdog in a bundle
     assert opts["browser.gatherUsageStats"] is False
+    # Regression guard: frozen bundles aren't under site-packages, so Streamlit
+    # would auto-enable developmentMode and serve "/" from a non-existent Node
+    # dev server (404). Must be pinned off.
+    assert opts["global.developmentMode"] is False
+
+
+def test_streamlit_env_does_not_set_development_mode():
+    # Streamlit parses bool env vars by truthiness, so "false" would read as
+    # True and force dev mode ON — it must not appear here.
+    env = dapp.streamlit_env(8533)
+    assert "STREAMLIT_GLOBAL_DEVELOPMENT_MODE" not in env
 
 
 def test_streamlit_env_pins_port_via_env():

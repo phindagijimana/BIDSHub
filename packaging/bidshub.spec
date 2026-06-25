@@ -20,6 +20,14 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metada
 
 ROOT = Path(SPECPATH).resolve().parent  # SPECPATH = packaging/
 
+# The spec lives in packaging/, so PyInstaller puts THAT on sys.path — not the
+# repo root. Without this, `collect_submodules('src')` can't import `src` and
+# returns nothing, so every src.* module that only app.py imports (src.theme,
+# the platform agents, …) is silently left out of the bundle and the app dies
+# at runtime with ModuleNotFoundError. Put the repo root on the path first.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 datas = []
 binaries = []
 hiddenimports = []
@@ -30,8 +38,15 @@ datas += [
     (str(ROOT / ".streamlit"), ".streamlit"),
     (str(ROOT / "assets"), "assets"),
 ]
-hiddenimports += collect_submodules("src")
+# collect_submodules pulls in every src.*/scripts.* module; PyInstaller then
+# follows each one's own imports, so their third-party deps come along too.
+src_mods = collect_submodules("src")
+assert "src.theme" in src_mods, "collect_submodules('src') failed — src not importable at spec eval"
+hiddenimports += src_mods
 hiddenimports += collect_submodules("scripts")
+# Imported directly by app.py (which PyInstaller never analyses); harmless if
+# already pulled in transitively via src.
+hiddenimports += ["dotenv"]
 
 # --- heavy / data-bearing third-party libs ---------------------------------
 THIRD_PARTY = [
