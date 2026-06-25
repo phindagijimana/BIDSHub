@@ -112,7 +112,13 @@ class BIDSValidator:
                 details['modalities_found'] = modalities
                 
                 if not modalities:
-                    issues.append("[ERROR] No valid modality folders found (anat, func, dwi, etc.)")
+                    # Remote file listings from these platforms are typically only
+                    # one directory level deep, so nested modality folders
+                    # (sub-XX/anat/...) aren't visible here. The reliable remote
+                    # BIDS signal is dataset_description.json + sub-* folders, so
+                    # treat a missing modality folder as a warning, not a hard
+                    # failure (otherwise valid datasets like OpenNeuro are rejected).
+                    warnings.append("[WARNING] Could not confirm modality folders (anat/func/dwi) from the remote listing")
                 
                 if naming_issues:
                     issues.extend(naming_issues[:3])  # Limit to first 3

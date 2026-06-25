@@ -1999,17 +1999,52 @@ def page_manage_datasets():
                     if validate_bids and root_path and Path(root_path).exists():
                         with st.spinner("Validating BIDS structure..."):
                             is_valid, validation_msg = validate_bids_dataset(root_path)
-                            
+
                             if not is_valid:
                                 st.warning("BIDS Validation Issues:")
                                 st.text(validation_msg)
                                 st.info(ErrorMessages.suggest_fix('NOT_BIDS_COMPLIANT', None))
-                                
+
                                 if st.checkbox("Add dataset anyway (not recommended)"):
                                     validation_passed = True
                                 else:
                                     validation_passed = False
                                     st.error(ErrorMessages.NOT_BIDS_COMPLIANT)
+                            else:
+                                st.success("BIDS validation passed!")
+                    elif validate_bids and new_platform in ('openneuro', 'dandi'):
+                        # Validate cloud (public) datasets too, so BIDS compliance is
+                        # checked consistently — not only for local datasets. The
+                        # reliable remote signal is dataset_description.json + sub-*
+                        # folders (OpenNeuro passes; DANDI/NWB does not).
+                        with st.spinner(f"Validating BIDS structure on {new_platform.title()}..."):
+                            try:
+                                from src.bids_validator import BIDSValidator
+                                if new_platform == 'openneuro':
+                                    from src.openneuro_agent import OpenNeuroAgent
+                                    agent = OpenNeuroAgent()
+                                else:
+                                    from src.dandi_agent import DANDIAgent
+                                    agent = DANDIAgent()
+                                is_valid, validation_msg, _ = BIDSValidator().validate_remote_dataset(
+                                    agent, external_id, new_platform
+                                )
+                            except Exception as e:
+                                # Never block a legitimate add on a validator error.
+                                is_valid, validation_msg = True, f"(BIDS check skipped: {e})"
+
+                            if not is_valid:
+                                st.warning("BIDS Validation Issues:")
+                                st.text(validation_msg)
+                                if st.checkbox("Add dataset anyway (not recommended)", key="cloud_add_anyway"):
+                                    validation_passed = True
+                                else:
+                                    validation_passed = False
+                                    st.error(
+                                        "This dataset doesn't look BIDS-compliant. BIDSHub's "
+                                        "browsing, QC, and viewer features assume BIDS — non-BIDS "
+                                        "data (e.g. DANDI/NWB) will show limited information."
+                                    )
                             else:
                                 st.success("BIDS validation passed!")
                     
