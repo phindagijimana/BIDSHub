@@ -1489,9 +1489,17 @@ def page_manage_datasets():
     datasets = st.session_state.db.get_all_datasets()
     
     # Display connected datasets
-    st.markdown('<h2 class="section-header">Connected Datasets</h2>', 
+    st.markdown('<h2 class="section-header">Connected Datasets</h2>',
                 unsafe_allow_html=True)
-    
+
+    # One-shot confirmation after an add (we rerun on add so the new row appears).
+    just_added = st.session_state.pop('_dataset_added', None)
+    if just_added:
+        st.success(
+            f"Dataset '{just_added}' added. Expand it below and click **Sync** "
+            "to fetch its subjects from the platform."
+        )
+
     if not datasets:
         st.info("No datasets configured yet. Add your first dataset below.")
     else:
@@ -2086,12 +2094,11 @@ def page_manage_datasets():
                                         st.error(f"Error indexing local dataset: {str(e)}")
                                         st.warning("Dataset added but subjects not indexed. Check BIDS structure.")
                             else:
-                                # Cloud dataset - needs sync. Nav buttons can't live
-                                # inside st.form(); guide the user to the Sync action.
-                                st.info(
-                                    "Dataset added. Expand it under **Connected Datasets** above "
-                                    "and click **Sync** to fetch its subjects from the platform."
-                                )
+                                # Cloud dataset - needs sync. Rerun so the new row
+                                # shows under Connected Datasets (the list above was
+                                # built before this add) and can be synced right away.
+                                st.session_state['_dataset_added'] = dataset_name
+                                st.rerun()
                         else:
                             st.error("Failed to add dataset. Check database connection.")
 
