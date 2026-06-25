@@ -80,6 +80,18 @@ def downloads_dir() -> Path:
     return Path.home() / "data-explorer" / "datasets"
 
 
+def dataset_metadata_dir(dataset_id) -> Path:
+    """Per-dataset cache dir for synced metadata (e.g. a participants.tsv).
+
+    Cloud datasets that haven't been downloaded have no on-disk BIDS tree, so
+    when a Sync fetches subject demographics from the platform we cache them
+    here as a participants.tsv. The Browse/QC tables read this as a fallback so
+    age/sex/diagnosis show up for cloud datasets too. Kept under the data dir
+    (not the dataset's root_path) so it never gets confused with downloaded data.
+    """
+    return data_dir() / "metadata_cache" / f"dataset_{dataset_id}"
+
+
 def cohorts_dir() -> Path:
     """Default directory exported cohorts are written to.
 

@@ -1606,7 +1606,33 @@ def page_manage_datasets():
                                                 scan_count += 1
                                             
                                             indexed_count += 1
-                                        
+
+                                        # Cache platform-fetched demographics as a
+                                        # participants.tsv so the Browse/QC tables show
+                                        # age/sex/diagnosis for this (cloud) dataset.
+                                        try:
+                                            from src.app_paths import dataset_metadata_dir
+                                            cols = ['participant_id', 'age', 'sex', 'diagnosis',
+                                                    'group', 'handedness']
+                                            lines = ['\t'.join(cols)]
+                                            for sd in subjects_data:
+                                                pid = sd.get('subject_id', '')
+                                                if pid and not pid.startswith('sub-'):
+                                                    pid = f'sub-{pid}'
+                                                row = [pid,
+                                                       sd.get('age'), sd.get('sex'),
+                                                       sd.get('diagnosis'),
+                                                       sd.get('participant_group'),
+                                                       sd.get('handedness')]
+                                                lines.append('\t'.join(
+                                                    '' if v is None else str(v) for v in row))
+                                            mdir = dataset_metadata_dir(dataset['id'])
+                                            mdir.mkdir(parents=True, exist_ok=True)
+                                            (mdir / 'participants.tsv').write_text(
+                                                '\n'.join(lines) + '\n')
+                                        except Exception:
+                                            pass  # demographics cache is best-effort
+
                                         # Update last sync
                                         st.session_state.db.update_dataset(
                                             dataset['id'],
@@ -1737,11 +1763,12 @@ def page_manage_datasets():
         render_xnat_beta_notice()
     
     # Dataset configuration form
-    with st.form("add_dataset_form"):
+    with st.form(f"add_dataset_form_{new_platform}"):
         dataset_name = st.text_input(
             "Dataset Name",
             placeholder="My Dataset",
-            help="Unique name for this dataset"
+            help="Unique name for this dataset",
+            key=f"new_dataset_name_{new_platform}",
         )
         
         col1, col2 = st.columns(2)
@@ -2219,15 +2246,15 @@ def page_home():
         # Quick features
         st.markdown("""
             <div class="quick-feature">
-                <div class="quick-feature-icon">•</div>
+                <div class="quick-feature-icon">✓</div>
                 <span>7 supported platforms (Pennsieve, OpenNeuro, DANDI, XNAT, HPC, Remote)</span>
             </div>
             <div class="quick-feature">
-                <div class="quick-feature-icon">•</div>
+                <div class="quick-feature-icon">✓</div>
                 <span>Cross-platform metadata filtering with BIDS validation</span>
             </div>
             <div class="quick-feature">
-                <div class="quick-feature-icon">•</div>
+                <div class="quick-feature-icon">✓</div>
                 <span>Scan-level quality control with Pennsieve sync</span>
             </div>
         """, unsafe_allow_html=True)

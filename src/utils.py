@@ -254,6 +254,13 @@ def enrich_subjects_for_display(subjects: List[Dict], db) -> List[Dict]:
                     participants = MetadataHandler.parse_participants_tsv(
                         str(Path(root) / 'participants.tsv')
                     )
+                # Fallback for cloud datasets (no on-disk BIDS tree): the Sync
+                # caches platform-fetched demographics as a participants.tsv.
+                if not participants:
+                    from src.app_paths import dataset_metadata_dir
+                    cached = dataset_metadata_dir(dataset_id) / 'participants.tsv'
+                    if cached.exists():
+                        participants = MetadataHandler.parse_participants_tsv(str(cached))
             except Exception:
                 participants = {}
 
