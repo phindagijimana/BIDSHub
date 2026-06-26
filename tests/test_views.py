@@ -131,3 +131,27 @@ def test_export_page_renders():
 def test_transfer_page_renders():
     at = AppTest.from_function(_transfer_script).run()
     assert not at.exception, f"transfer render raised: {at.exception}"
+
+
+def _qc_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    import app
+    app.init_session_state()
+    st.session_state.db = MagicMock()
+    st.session_state.current_page = 'qc'
+    from views.qc import page_qc
+    page_qc()
+
+
+def test_qc_page_no_refactor_errors():
+    # The QC page builds real QCManager/AutomatedQC objects, so a mocked DB may
+    # raise data-shape errors — those are not refactor bugs. We assert only that
+    # no import/name error (the refactor failure mode) occurred.
+    at = AppTest.from_function(_qc_script).run()
+    blob = " ".join(
+        f"{getattr(e, 'type', '')} {getattr(e, 'value', '')} {getattr(e, 'message', '')}"
+        for e in at.exception
+    )
+    for bad in ("NameError", "ImportError", "ModuleNotFoundError", "cannot import"):
+        assert bad not in blob, f"qc page refactor error: {blob}"
