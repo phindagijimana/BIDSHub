@@ -5,6 +5,16 @@ Provides interface to download public BIDS datasets from OpenNeuro.
 OpenNeuro is a free and open platform for sharing neuroimaging data.
 """
 
+import os
+
+# openneuro-py switches to Jupyter-notebook progress bars when VSCODE_PID is set
+# (see openneuro/_download.py). Outside a real notebook (no ipywidgets) that
+# raises "IProgress not found" and aborts every download — which happens when
+# BIDSHub is launched from a VS Code integrated terminal. We run as a server /
+# desktop app, so clear that detection BEFORE importing openneuro so it keeps
+# plain console progress bars.
+os.environ.pop("VSCODE_PID", None)
+
 import openneuro as on
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
@@ -556,7 +566,11 @@ class OpenNeuroAgent:
         return self.download_dataset(
             dataset_id=dataset_id,
             target_dir=target_dir,
-            include_patterns=['participants.tsv', 'participants.json']
+            # participants.json is an optional sidecar many datasets omit, and
+            # openneuro-py fails the whole download if an included path is
+            # missing. Request only the required participants.tsv — the actual
+            # demographic metadata (age, sex, ...) lives there.
+            include_patterns=['participants.tsv']
         )
     
     def validate_dataset_id(self, dataset_id: str) -> bool:

@@ -164,5 +164,33 @@ def test_check_openneuro_connection_failure(mock_get):
     assert result is False
 
 
+def test_participants_tsv_requests_only_tsv():
+    """Regression: download_participants_tsv must request only participants.tsv.
+
+    Many OpenNeuro datasets (e.g. ds000001) ship no participants.json, and
+    openneuro-py aborts the whole download if an included path is missing —
+    which previously dropped all demographic metadata (age/sex) silently.
+    """
+    with patch('openneuro.download'):
+        from src.openneuro_agent import OpenNeuroAgent
+        agent = OpenNeuroAgent()
+        with patch.object(agent, 'download_dataset', return_value=True) as mock_dl:
+            agent.download_participants_tsv('ds000001', '/tmp/x')
+        _, kwargs = mock_dl.call_args
+        assert kwargs.get('include_patterns') == ['participants.tsv']
+
+
+def test_import_neutralizes_vscode_pid(monkeypatch):
+    """Regression: the agent clears VSCODE_PID so openneuro-py doesn't switch to
+    Jupyter-notebook progress bars, which raise "IProgress not found" outside a
+    notebook (e.g. when BIDSHub is launched from a VS Code terminal)."""
+    import importlib
+    import os
+    monkeypatch.setenv('VSCODE_PID', '12345')
+    import src.openneuro_agent as mod
+    importlib.reload(mod)
+    assert 'VSCODE_PID' not in os.environ
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
