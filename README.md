@@ -1,5 +1,10 @@
 # BIDSHub
 
+[![CI](https://github.com/phindagijimana/BIDSHub/actions/workflows/ci.yml/badge.svg)](https://github.com/phindagijimana/BIDSHub/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/phindagijimana/BIDSHub/branch/main/graph/badge.svg)](https://codecov.io/gh/phindagijimana/BIDSHub)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+
 **Multi-platform neuroimaging dataset management and exploration** — browse, filter, and download BIDS datasets from several platforms in one place.
 
 **Datasets must be [BIDS](https://bids.neuroimaging.io/).** BIDSHub validates on add.

@@ -42,11 +42,24 @@ jobs:
           # there's no point running the rest of the suite.
           python -m pytest tests/test_smoke.py -q --tb=short
 
-      - name: Pytest
+      - name: Pytest (with coverage)
         env:
           BIDSHUB_NONINTERACTIVE: "1"
         run: |
-          python -m pytest tests/ -q --tb=short
+          python -m pytest tests/ -q --tb=short \
+            --cov=src --cov=app --cov=desktop \
+            --cov-report=term-missing --cov-report=xml
+
+      # Publishes the coverage % (and the README badge). Reports once, from a
+      # single matrix cell. Connect the repo at codecov.io and add a
+      # CODECOV_TOKEN secret to activate; never fails CI if it can't upload.
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # Phase 5: image builds and a minimal run smoke (Linux only; large image)
   docker-smoke:

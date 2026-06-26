@@ -1,0 +1,24 @@
+{
+  "title": "BIDSHub: Multi-platform neuroimaging dataset management and exploration",
+  "description": "BIDSHub is a local-first desktop and web application for browsing, filtering, quality-controlling, downloading, and exporting BIDS neuroimaging datasets across multiple platforms (OpenNeuro, DANDI, Pennsieve, XNAT, HPC/SSH, and local folders), with an integrated NIfTI viewer and one-click BIDS cohort export.",
+  "upload_type": "software",
+  "license": "MIT",
+  "version": "3.1.5",
+  "keywords": [
+    "neuroimaging",
+    "BIDS",
+    "traumatic brain injury",
+    "MRI",
+    "quality control",
+    "data management",
+    "OpenNeuro",
+    "DANDI",
+    "reproducibility"
+  ],
+  "creators": [
+    {
+      "name": "TODO-Lastname, TODO-Firstname",
+      "affiliation": "TODO institution"
+    }
+  ]
+}

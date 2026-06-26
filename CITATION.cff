@@ -1,0 +1,35 @@
+# Citation metadata for BIDSHub. GitHub reads this to render a "Cite this
+# repository" button, and Zenodo uses it when archiving a release for a DOI.
+# >>> Before publishing/archiving: fill in the author name(s), ORCID,
+# affiliation, and (after the first Zenodo release) the DOI. <<<
+cff-version: 1.2.0
+message: "If you use BIDSHub in your research, please cite it as below."
+title: "BIDSHub: Multi-platform neuroimaging dataset management and exploration"
+abstract: >-
+  BIDSHub is a local-first desktop and web application for browsing, filtering,
+  quality-controlling, downloading, and exporting BIDS neuroimaging datasets
+  across multiple platforms (OpenNeuro, DANDI, Pennsieve, XNAT, HPC/SSH, and
+  local folders), with an integrated NIfTI viewer and one-click BIDS cohort
+  export.
+type: software
+authors:
+  - family-names: "TODO-LASTNAME"        # <-- replace before publishing
+    given-names: "TODO-FIRSTNAME"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+    # affiliation: "Your institution"
+version: "3.1.5"
+date-released: "2026-06-26"
+license: MIT
+repository-code: "https://github.com/phindagijimana/BIDSHub"
+url: "https://github.com/phindagijimana/BIDSHub"
+keywords:
+  - neuroimaging
+  - BIDS
+  - traumatic brain injury
+  - MRI
+  - quality control
+  - data management
+  - OpenNeuro
+  - DANDI
+  - reproducibility
+# doi: "10.5281/zenodo.XXXXXXX"          # <-- add after the first Zenodo archive
