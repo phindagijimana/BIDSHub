@@ -44,6 +44,10 @@ src_mods = collect_submodules("src")
 assert "src.theme" in src_mods, "collect_submodules('src') failed — src not importable at spec eval"
 hiddenimports += src_mods
 hiddenimports += collect_submodules("scripts")
+# Page modules extracted from app.py (loaded dynamically by Streamlit, so the
+# import graph from desktop/app.py never sees them — collect explicitly).
+hiddenimports += collect_submodules("views")
+assert "views.dashboard" in hiddenimports, "collect_submodules('views') failed — views not importable at spec eval"
 # Imported directly by app.py (which PyInstaller never analyses); harmless if
 # already pulled in transitively via src.
 hiddenimports += ["dotenv"]
