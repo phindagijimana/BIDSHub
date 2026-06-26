@@ -42,3 +42,19 @@ def test_check_for_update_none_when_current_is_latest(monkeypatch):
 def test_check_for_update_none_when_offline(monkeypatch):
     monkeypatch.setattr(updates, "fetch_latest_release", lambda timeout=4.0: None)
     assert updates.check_for_update(current="3.1.1") is None
+
+
+def test_format_update_banner_mentions_versions_and_link():
+    """The in-app banner (app.py) renders the new version, current version, link."""
+    from app import format_update_banner
+
+    info = {
+        "version": "v3.2.0",
+        "url": "https://github.com/phindagijimana/BIDSHub/releases/tag/v3.2.0",
+        "name": "BIDSHub 3.2.0",
+    }
+    msg = format_update_banner(info, "3.1.4")
+    assert "v3.2.0" in msg            # the available version
+    assert "3.1.4" in msg             # the current version
+    assert info["url"] in msg         # a working download link
+    assert "reinstall" in msg.lower()

@@ -7,6 +7,7 @@ Multi-platform support: Local, Pennsieve, OpenNeuro, XNAT, DANDI, HPC, Remote Se
 
 import streamlit as st
 import os
+import sys
 import pandas as pd
 import json
 import logging
@@ -6234,6 +6235,51 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
     time.sleep(2)
 
 
+def format_update_banner(info: dict, current: str) -> str:
+    """Markdown for the 'newer release available' banner. Pure / unit-testable."""
+    return (
+        f"**BIDSHub {info['version']} is available** — you have v{current}. "
+        f"[Download the latest release]({info['url']}) and reinstall; "
+        f"your data is preserved."
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _check_latest_release():
+    """Cached, network-safe check for a newer release. Returns dict or None.
+
+    Cached for an hour so reruns don't re-hit the GitHub API; any
+    network/import error yields None (no banner).
+    """
+    try:
+        from desktop.updates import check_for_update
+        return check_for_update()
+    except Exception:
+        return None
+
+
+def render_update_banner():
+    """Dismissible 'update available' banner — desktop (frozen) builds only.
+
+    Source/Docker deployments update via ``git pull``/rebuild, so the
+    "download a new installer" advice only applies to the packaged app.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    if st.session_state.get("update_banner_dismissed"):
+        return
+    info = _check_latest_release()
+    if not info:
+        return
+    col_msg, col_x = st.columns([0.9, 0.1])
+    with col_msg:
+        st.info(format_update_banner(info, __version__), icon="⬆️")
+    with col_x:
+        if st.button("Dismiss", key="dismiss_update_banner"):
+            st.session_state.update_banner_dismissed = True
+            st.rerun()
+
+
 def main():
     """Main application entry point."""
     # Initialize session state
@@ -6256,7 +6302,10 @@ def main():
     
     # Render sidebar
     render_sidebar()
-    
+
+    # Notify (desktop builds) when a newer release is available
+    render_update_banner()
+
     # Route to appropriate page
     page = st.session_state.current_page
     
