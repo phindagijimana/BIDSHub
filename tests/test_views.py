@@ -65,3 +65,69 @@ def _viewer_script():
 def test_viewer_page_renders():
     at = AppTest.from_function(_viewer_script).run()
     assert not at.exception, f"viewer render raised: {at.exception}"
+
+
+def _mk_empty_db():
+    # Inlined per-script (AppTest runs scripts in an isolated namespace).
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    db.get_all_subjects.return_value = []
+    db.get_subjects.return_value = []
+    return db
+
+
+def _subjects_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    import app
+    app.init_session_state()  # initialize the session-state keys the page expects
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    db.get_all_subjects.return_value = []
+    db.get_subjects.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'subjects'
+    st.session_state.subjects_per_page = 25       # set by main() in the real app
+    st.session_state.current_page_num = 1
+    from views.subjects import page_subjects
+    page_subjects()
+
+
+def _export_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    db.get_all_subjects.return_value = []
+    db.get_subjects.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'export'
+    from views.export import page_export
+    page_export()
+
+
+def _transfer_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'transfer'
+    from views.transfer import page_transfer
+    page_transfer()
+
+
+def test_subjects_page_renders():
+    at = AppTest.from_function(_subjects_script).run()
+    assert not at.exception, f"subjects render raised: {at.exception}"
+
+
+def test_export_page_renders():
+    at = AppTest.from_function(_export_script).run()
+    assert not at.exception, f"export render raised: {at.exception}"
+
+
+def test_transfer_page_renders():
+    at = AppTest.from_function(_transfer_script).run()
+    assert not at.exception, f"transfer render raised: {at.exception}"
