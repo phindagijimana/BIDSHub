@@ -16,8 +16,8 @@
 
 ## Requirements
 
-- **Desktop app:** macOS 12+ on **Apple Silicon**, or **Windows 10/11 (64-bit)**. ~600 MB free disk. No Python needed.
-  *Intel Macs and Linux aren't packaged yet — use the native install below.*
+- **Desktop app:** macOS 12+ on **Apple Silicon**, **Windows 10/11 (64-bit)**, or **Linux (x86-64)**. ~600 MB free disk. No Python needed.
+  *Intel Macs aren't packaged yet — use the native install below.*
 - **Native:** Python **3.10+** on macOS / Linux / Windows.
 - **Docker:** Docker with Compose v2 (bash / WSL).
 
@@ -39,6 +39,7 @@ Download the installer for your OS from the **[latest release](https://github.co
 |----|------|
 | macOS (Apple Silicon) | `BIDSHub.dmg` |
 | Windows 10/11 (x64) | `BIDSHub-Setup.exe` |
+| Linux (x86-64) | `BIDSHub-x86_64.AppImage` |
 
 **1 · Verify the download with the checksum (recommended).** Every release ships a
 `SHA256SUMS` file. Compute your file's hash and confirm it matches — this proves
@@ -46,8 +47,10 @@ the download wasn't corrupted or tampered with, which matters because the apps
 aren't code-signed yet:
 
 ```bash
-# macOS / Linux
-shasum -a 256 BIDSHub.dmg          # compare the hash to the line in SHA256SUMS
+# macOS
+shasum -a 256 BIDSHub.dmg                 # compare the hash to the line in SHA256SUMS
+# Linux
+sha256sum BIDSHub-x86_64.AppImage         # compare to SHA256SUMS
 ```
 ```powershell
 # Windows (PowerShell)
@@ -57,6 +60,7 @@ Get-FileHash .\BIDSHub-Setup.exe -Algorithm SHA256    # compare to SHA256SUMS
 **2 · Install & launch.**
 - **macOS:** open `BIDSHub.dmg`, drag **BIDSHub** into **Applications**, then launch it.
 - **Windows:** run `BIDSHub-Setup.exe`, follow the installer, then launch **BIDSHub** from the Start menu / desktop.
+- **Linux:** make the AppImage executable — `chmod +x BIDSHub-x86_64.AppImage` (or right-click → **Properties → Permissions → Allow executing file as program**) — then double-click it. No install needed.
 
 The app starts a local server and opens in its own window; nothing is uploaded.
 
@@ -71,6 +75,7 @@ code-signed yet, the OS blocks them the first time. After verifying the checksum
   *Terminal shortcut* (skips the steps above): `xattr -dr com.apple.quarantine /Applications/BIDSHub.app`, then double-click normally. This also fixes a *"the app is damaged"* message.
   *On macOS 12–14 you can instead right-click (Control-click) the app → **Open** → **Open** — Apple removed that shortcut in macOS 15.*
 - **Windows (SmartScreen):** when "**Windows protected your PC**" appears on the installer or app, click **More info** → **Run anyway**.
+- **Linux:** no Gatekeeper/SmartScreen equivalent — the AppImage just needs the executable bit (step 2). If a double-click does nothing, run it from a terminal to see any error: `./BIDSHub-x86_64.AppImage`. Older distros may need FUSE: `sudo apt install libfuse2`.
 
 **Windows — Microsoft Edge WebView2 runtime.** The app window uses Edge WebView2,
 preinstalled on Windows 11 and current Windows 10. The installer installs it
