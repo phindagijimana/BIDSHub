@@ -14,17 +14,59 @@
 
 ## Quick start
 
-**Desktop app (no Python needed):** download the installer for your OS from the
-[latest release](https://github.com/phindagijimana/BIDSHub/releases/latest) —
-`BIDSHub.dmg` (macOS) or `BIDSHub-Setup.exe` (Windows) — and open it. Your data
-lives in a per-user folder (`~/Library/Application Support/BIDSHub` on macOS,
-`%APPDATA%\BIDSHub` on Windows).
+### Desktop app (no Python needed)
 
-> Until the app is code-signed, the OS shows an "unidentified developer" warning
-> on first launch. macOS: right-click the app → **Open** → **Open**. Windows:
-> **More info** → **Run anyway**.
+Download the installer for your OS from the **[latest release](https://github.com/phindagijimana/BIDSHub/releases/latest)**:
 
-**Native (recommended for developers):** Python on the host; one database under `./data` (not containerized in this path).
+| OS | File |
+|----|------|
+| macOS (Apple Silicon) | `BIDSHub.dmg` |
+| Windows 10/11 (x64) | `BIDSHub-Setup.exe` |
+
+**1 · Verify the download with the checksum (recommended).** Every release ships a
+`SHA256SUMS` file. Compute your file's hash and confirm it matches — this proves
+the download wasn't corrupted or tampered with, which matters because the apps
+aren't code-signed yet:
+
+```bash
+# macOS / Linux
+shasum -a 256 BIDSHub.dmg          # compare the hash to the line in SHA256SUMS
+```
+```powershell
+# Windows (PowerShell)
+Get-FileHash .\BIDSHub-Setup.exe -Algorithm SHA256    # compare to SHA256SUMS
+```
+
+**2 · Install & launch.**
+- **macOS:** open `BIDSHub.dmg`, drag **BIDSHub** into **Applications**, then launch it.
+- **Windows:** run `BIDSHub-Setup.exe`, follow the installer, then launch **BIDSHub** from the Start menu / desktop.
+
+The app starts a local server and opens in its own window; nothing is uploaded.
+
+**3 · First launch — allow the unsigned app to run.** Because the apps aren't
+code-signed yet, the OS blocks them the first time. After verifying the checksum
+(step 1), allow it — this is needed only once:
+- **macOS (Gatekeeper):** right-click (Control-click) **BIDSHub** in Applications → **Open** → **Open** again. If macOS says the app "is damaged," clear the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/BIDSHub.app`
+- **Windows (SmartScreen):** when "**Windows protected your PC**" appears on the installer or app, click **More info** → **Run anyway**.
+
+**Windows — Microsoft Edge WebView2 runtime.** The app window uses Edge WebView2,
+preinstalled on Windows 11 and current Windows 10. The installer installs it
+automatically if missing; if the app installs but **no window appears**, install
+the free [Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+from Microsoft and relaunch.
+
+**Your data** lives in a per-user folder — macOS: `~/Library/Application Support/BIDSHub`,
+Windows: `%APPDATA%\BIDSHub` (database, downloads, cohorts, and `logs/desktop.log`).
+
+**Using it:** click **Getting Started**, then **Manage Datasets → Add New Dataset**
+to connect a platform (OpenNeuro / DANDI are public; Pennsieve / XNAT / HPC need
+your credentials). Expand the dataset and click **Sync** to pull its subjects,
+then use **Browse Subjects**, **QC Dashboard**, **Viewer**, and **Export**. Or
+click **Try with sample data** for a real demo brain.
+
+### Native (recommended for developers)
+
+Python on the host; one database under `./data` (not containerized in this path).
 
 ```bash
 git clone https://github.com/phindagijimana/BIDSHub.git
