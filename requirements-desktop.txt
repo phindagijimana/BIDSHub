@@ -2,8 +2,14 @@
 # ./hub or Docker flows). Install with:  pip install -r requirements-desktop.txt
 #
 # Native OS webview window host. On macOS uses the Cocoa/pyobjc backend; on
-# Windows uses Edge WebView2; on Linux uses GTK/Qt.
+# Windows uses Edge WebView2; on Linux uses GTK/WebKit2.
 pywebview>=5.0
+
+# Linux only: the GTK/WebKit2 backend needs PyGObject + pycairo, which the
+# [gtk] extra pulls in. They compile against the system webkit2gtk /
+# girepository -dev packages (installed in CI before this runs). The macOS and
+# Windows backends need no extra Python deps.
+pywebview[gtk]>=5.0 ; sys_platform == "linux"
 
 # Freeze the desktop app (build only; not a runtime dep)
 pyinstaller>=6.0

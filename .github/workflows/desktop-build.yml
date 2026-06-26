@@ -22,12 +22,17 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # Experimental matrix entries (Linux) may fail without failing the whole
+    # workflow, so a flaky GTK/AppImage build never blocks publishing the
+    # proven macOS/Windows installers. Remove once Linux is stable.
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: macos-14, label: macos-arm64 }
           - { os: windows-latest, label: windows-x86_64 }
+          - { os: ubuntu-latest, label: linux-x86_64, experimental: true }
           # macos-13 (Intel) is omitted: those runners queue for hours on this
           # account and would block the release job. Add back (or build a
           # universal2 binary) once Intel-Mac support is needed.
@@ -38,6 +43,19 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+
+      # Linux: system libraries for pywebview's GTK/WebKit2 backend and for
+      # building PyGObject + pycairo from source (the [gtk] extra). Must run
+      # before `pip install`. WebKit2GTK 4.1 is the version on ubuntu-24.04.
+      - name: Install GTK/WebKit2 system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config python3-dev \
+            libgirepository1.0-dev libcairo2-dev gobject-introspection \
+            gir1.2-gtk-3.0 libgtk-3-0 \
+            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
 
       - name: Install dependencies
         run: |
@@ -112,6 +130,19 @@ jobs:
           path: dist/BIDSHub-Setup.exe
           retention-days: 14
 
+      # ---- Linux deliverable ----
+      - name: Build AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: bash packaging/make_appimage.sh
+
+      - name: Upload Linux artifact
+        if: ${{ runner.os == 'Linux' && (github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-'))) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIDSHub-${{ matrix.label }}
+          path: dist/BIDSHub-x86_64.AppImage
+          retention-days: 14
+
   release:
     needs: build
     # Only publish for final tags (vX.Y.Z). Prerelease/dry-run tags that contain
@@ -127,7 +158,8 @@ jobs:
       - name: Checksums
         run: |
           cd artifacts
-          find . -type f \( -name '*.dmg' -o -name '*.exe' \) -exec sha256sum {} \; > ../SHA256SUMS
+          find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' \) \
+            -exec sha256sum {} \; > ../SHA256SUMS
           cat ../SHA256SUMS
 
       - name: Publish release
@@ -136,5 +168,6 @@ jobs:
           files: |
             artifacts/**/*.dmg
             artifacts/**/*.exe
+            artifacts/**/*.AppImage
             SHA256SUMS
           generate_release_notes: true
