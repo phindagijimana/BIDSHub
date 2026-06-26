@@ -63,7 +63,13 @@ The app starts a local server and opens in its own window; nothing is uploaded.
 **3 · First launch — allow the unsigned app to run.** Because the apps aren't
 code-signed yet, the OS blocks them the first time. After verifying the checksum
 (step 1), allow it — this is needed only once:
-- **macOS (Gatekeeper):** right-click (Control-click) **BIDSHub** in Applications → **Open** → **Open** again. If macOS says the app "is damaged," clear the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/BIDSHub.app`
+- **macOS (Gatekeeper):** the first launch is blocked with *"Apple could not verify BIDSHub is free of malware."*
+  1. Double-click **BIDSHub** in Applications, then click **Done** on the warning (do **not** click *Move to Trash*).
+  2. Open **System Settings → Privacy & Security**, scroll to the **Security** section, and click **Open Anyway** next to the BIDSHub message.
+  3. Authenticate (Touch ID / password), then click **Open Anyway** once more. macOS remembers it — every launch after this is a normal double-click.
+
+  *Terminal shortcut* (skips the steps above): `xattr -dr com.apple.quarantine /Applications/BIDSHub.app`, then double-click normally. This also fixes a *"the app is damaged"* message.
+  *On macOS 12–14 you can instead right-click (Control-click) the app → **Open** → **Open** — Apple removed that shortcut in macOS 15.*
 - **Windows (SmartScreen):** when "**Windows protected your PC**" appears on the installer or app, click **More info** → **Run anyway**.
 
 **Windows — Microsoft Edge WebView2 runtime.** The app window uses Edge WebView2,
