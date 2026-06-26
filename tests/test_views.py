@@ -32,3 +32,36 @@ def test_dashboard_page_renders():
     # Overview + QC metric cards
     assert "Subjects" in labels
     assert "Pending" in labels
+
+
+def _home_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    db.get_all_datasets.return_value = []  # no datasets -> "Getting Started" path
+    st.session_state.db = db
+    st.session_state.current_page = 'home'
+    st.session_state.dataset_name = None
+    from views.home import page_home
+    page_home()
+
+
+def test_home_page_renders():
+    at = AppTest.from_function(_home_script).run()
+    assert not at.exception, f"home render raised: {at.exception}"
+
+
+def _viewer_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'viewer'
+    from views.viewer import page_viewer
+    page_viewer()
+
+
+def test_viewer_page_renders():
+    at = AppTest.from_function(_viewer_script).run()
+    assert not at.exception, f"viewer render raised: {at.exception}"
