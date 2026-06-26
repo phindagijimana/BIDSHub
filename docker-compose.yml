@@ -9,8 +9,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BIDSHUB_VERSION: ${BIDSHUB_VERSION:-3.1.1}
-    image: bidshub:${BIDSHUB_VERSION:-3.1.1}
+        BIDSHUB_VERSION: ${BIDSHUB_VERSION:-3.1.5}
+    image: bidshub:${BIDSHUB_VERSION:-3.1.5}
     container_name: bidshub
     ports:
       - "${BIDSHUB_HOST_PORT:-8501}:8501"
