@@ -4,6 +4,23 @@
 
 **Datasets must be [BIDS](https://bids.neuroimaging.io/).** BIDSHub validates on add.
 
+## What it does
+
+- **Connect once, browse everywhere** — OpenNeuro, DANDI, Pennsieve, XNAT, HPC clusters, and generic SSH servers in one interface.
+- **Filter by metadata** — search subjects by age, sex, diagnosis, modality, and session across multiple datasets.
+- **Quality control** — manual + automated QC at subject and scan level, with history and export.
+- **Built-in NIfTI viewer** — multiplanar + 3D view ([NiiVue](https://github.com/niivue/niivue)); no external tools.
+- **Selective download & transfer** — queue subjects/scans, download or move data between platforms.
+- **Cohort export** — assemble a new BIDS dataset from selected subjects (symlink / copy / hardlink).
+- **Local-first** — your data and database stay on your machine; nothing is uploaded.
+
+## Requirements
+
+- **Desktop app:** macOS 12+ on **Apple Silicon**, or **Windows 10/11 (64-bit)**. ~600 MB free disk. No Python needed.
+  *Intel Macs and Linux aren't packaged yet — use the native install below.*
+- **Native:** Python **3.10+** on macOS / Linux / Windows.
+- **Docker:** Docker with Compose v2 (bash / WSL).
+
 ## Documentation (three files)
 
 | | |
@@ -94,6 +111,25 @@ cd BIDSHub
 
 **Secrets:** keep API keys in **`.env`** only (never commit).
 
+## Supported platforms
+
+Add datasets in **Manage Datasets → Add New Dataset**.
+
+| Platform | Data | Credentials needed |
+|----------|------|--------------------|
+| **OpenNeuro** | Public BIDS MRI | None |
+| **DANDI** | Public (NWB / electrophysiology) | None (token for embargoed) |
+| **Pennsieve** | Private datasets (supports upload) | API key + secret |
+| **XNAT** | Institutional imaging archives | Server URL + username/password |
+| **HPC cluster** | BIDS on a cluster | SSH host + user (password or key) |
+| **Remote server** | BIDS over SSH/SFTP | SSH host + user (password or key) |
+| **Local** | A BIDS folder on disk | None |
+
+## Updating
+
+- **Desktop:** download the newest installer from the [latest release](https://github.com/phindagijimana/BIDSHub/releases/latest) and reinstall — your per-user data folder is preserved.
+- **Native:** `git pull && ./hub update`
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
@@ -102,4 +138,4 @@ MIT — see [LICENSE](LICENSE).
 
 **Issues:** [GitHub Issues](https://github.com/phindagijimana/BIDSHub/issues)
 
-**Version 3.1.1**
+**Current version:** see [Releases](https://github.com/phindagijimana/BIDSHub/releases).
