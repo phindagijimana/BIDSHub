@@ -155,3 +155,26 @@ def test_qc_page_no_refactor_errors():
     )
     for bad in ("NameError", "ImportError", "ModuleNotFoundError", "cannot import"):
         assert bad not in blob, f"qc page refactor error: {blob}"
+
+
+def _manage_datasets_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    import app
+    app.init_session_state()
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'manage_datasets'
+    from views.datasets import page_manage_datasets
+    page_manage_datasets()
+
+
+def test_manage_datasets_page_no_refactor_errors():
+    at = AppTest.from_function(_manage_datasets_script).run()
+    blob = " ".join(
+        f"{getattr(e, 'type', '')} {getattr(e, 'value', '')} {getattr(e, 'message', '')}"
+        for e in at.exception
+    )
+    for bad in ("NameError", "ImportError", "ModuleNotFoundError", "cannot import"):
+        assert bad not in blob, f"manage_datasets refactor error: {blob}"
