@@ -178,3 +178,26 @@ def test_manage_datasets_page_no_refactor_errors():
     )
     for bad in ("NameError", "ImportError", "ModuleNotFoundError", "cannot import"):
         assert bad not in blob, f"manage_datasets refactor error: {blob}"
+
+
+def _downloads_script():
+    import streamlit as st
+    from unittest.mock import MagicMock
+    import app
+    app.init_session_state()
+    db = MagicMock()
+    db.get_all_datasets.return_value = []
+    st.session_state.db = db
+    st.session_state.current_page = 'downloads'
+    from views.downloads import page_downloads
+    page_downloads()
+
+
+def test_downloads_page_no_refactor_errors():
+    at = AppTest.from_function(_downloads_script).run()
+    blob = " ".join(
+        f"{getattr(e, 'type', '')} {getattr(e, 'value', '')} {getattr(e, 'message', '')}"
+        for e in at.exception
+    )
+    for bad in ("NameError", "ImportError", "ModuleNotFoundError", "cannot import"):
+        assert bad not in blob, f"downloads refactor error: {blob}"

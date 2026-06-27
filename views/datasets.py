@@ -10,6 +10,7 @@ from src.database import Database
 from src.error_messages import ErrorMessages
 from src.openneuro_agent import OpenNeuroAgent, check_openneuro_connection
 from src.pennsieve_client import PennsieveClient
+from src.ui_calm import render_xnat_beta_notice
 
 
 def page_setup():
