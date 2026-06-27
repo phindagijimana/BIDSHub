@@ -9,7 +9,7 @@
 ; opens on a clean machine.
 
 #define AppName "BIDSHub"
-#define AppVersion "3.1.5"
+#define AppVersion "3.1.6"
 #define AppPublisher "BIDSHub"
 #define AppExe "BIDSHub.exe"
 

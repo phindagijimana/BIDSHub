@@ -1,6 +1,6 @@
 # BIDSHub — OCI image for Streamlit + SQLite. Build and run via ./hub-docker (see README).
 #
-#   docker build -t bidshub:3.1.5 --build-arg BIDSHUB_VERSION=3.1.5 .
+#   docker build -t bidshub:3.1.6 --build-arg BIDSHUB_VERSION=3.1.6 .
 #   # or: ./hub-docker install   (uses docker-compose.yml)
 #
 # The app listens on 0.0.0.0:8501 inside the container. Mount ./data to persist SQLite.
@@ -8,7 +8,7 @@
 
 FROM python:3.12-slim-bookworm
 
-ARG BIDSHUB_VERSION=3.1.5
+ARG BIDSHUB_VERSION=3.1.6
 LABEL org.opencontainers.image.title="BIDSHub" \
       org.opencontainers.image.version="${BIDSHUB_VERSION}" \
       org.opencontainers.image.description="Multi-platform BIDS dataset management and exploration (Streamlit)" \
