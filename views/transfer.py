@@ -1,15 +1,15 @@
 """Data transfer page + transfer execution (extracted from app.py)."""
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 import json
-import pandas as pd
+import logging
 import streamlit as st
-from src.agent_factory import AgentFactory
 from src.bids_utils import extract_bids_path
-from src.database import Database
 from src.error_messages import ErrorMessages, handle_agent_error
 from src.ui_calm import expected_empty
+
+logger = logging.getLogger(__name__)
 
 
 def page_transfer():

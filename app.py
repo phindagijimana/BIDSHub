@@ -6,14 +6,8 @@ Multi-platform support: Local, Pennsieve, OpenNeuro, XNAT, DANDI, HPC, Remote Se
 """
 
 import streamlit as st
-import os
 import sys
-import pandas as pd
-import json
 import logging
-from pathlib import Path
-from datetime import datetime
-from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -22,27 +16,12 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Import local modules
-from src.theme import apply_custom_theme, Theme, render_status_badge, format_file_size
+from src.theme import apply_custom_theme
 from src.database import Database
-from src.bids_loader import BIDSLoader
-from src.pennsieve_client import PennsieveClient
-from src.pennsieve_agent import PennsieveAgent, check_available_space
-from src.openneuro_agent import OpenNeuroAgent, check_openneuro_connection
-from src.automated_qc import AutomatedQC
-from src.metadata_filter import MetadataFilter
-from src.agent_factory import AgentFactory, create_agent_factory
-from src.bids_utils import extract_bids_path, normalize_subject_id, normalize_session_id, detect_sessions_in_path
-from src.error_messages import ErrorMessages, handle_agent_error
+from src.pennsieve_agent import PennsieveAgent
+from src.openneuro_agent import OpenNeuroAgent
 from src.bidshub_version import __version__
 from src.cache_manager import CacheManager
-from src.ui_calm import (
-    DOWNLOAD_QUEUE_PLATFORMS,
-    expected_empty,
-    quiet_queue_empty,
-    render_xnat_beta_notice,
-    toast_note,
-    toast_ok,
-)
 
 # Page modules extracted from this file (incremental de-monolithing — see views/).
 from views.dashboard import page_dashboard
@@ -52,7 +31,7 @@ from views.export import page_export
 from views.subjects import page_subjects, page_subject_detail
 from views.transfer import page_transfer
 from views.qc import page_qc
-from views.datasets import page_setup, page_manage_datasets
+from views.datasets import page_manage_datasets
 from views.downloads import page_downloads
 
 
