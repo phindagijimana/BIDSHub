@@ -1,11 +1,10 @@
 """Dashboard page (extracted from app.py)."""
 import streamlit as st
+from views.common import render_breadcrumb
 
 
 def page_dashboard():
     """Main dashboard page."""
-    from app import render_breadcrumb  # lazy import avoids circular import with app.py
-
     render_breadcrumb('dashboard')
     st.markdown('<h1 class="main-header">BIDSHub</h1>',
                 unsafe_allow_html=True)

@@ -185,11 +185,11 @@ def page_home():
             datasets = st.session_state.db.get_all_datasets(status='active')
 
         if datasets and len(datasets) > 0:
-            if st.button("Go to Dashboard →", type="primary", use_container_width=True, key="goto_dashboard"):
+            if st.button("Go to Dashboard →", type="primary", width='stretch', key="goto_dashboard"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
         else:
-            if st.button("Getting Started →", type="primary", use_container_width=True, key="getting_started"):
+            if st.button("Getting Started →", type="primary", width='stretch', key="getting_started"):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
 
@@ -212,7 +212,7 @@ def page_home():
                 )
                 if st.button(
                     "Try with sample data",
-                    use_container_width=True,
+                    width='stretch',
                     key="try_sample_data",
                     help="Loads a small synthetic BIDS dataset bundled with the repo. "
                          "Nothing leaves your machine.",

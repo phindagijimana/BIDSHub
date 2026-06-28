@@ -12,11 +12,11 @@ from src.metadata_filter import MetadataFilter
 from src.pennsieve_agent import check_available_space
 from src.theme import format_file_size
 from src.ui_calm import DOWNLOAD_QUEUE_PLATFORMS, quiet_queue_empty, toast_note, toast_ok
+from views.common import get_available_sessions, render_breadcrumb, render_page_header
 
 
 def execute_downloads(download_manager, database):
     """Execute queued downloads routing to correct agent per dataset (v3.1.1+: all platforms)."""
-    
     queue_items = download_manager.get_queue_items(status='queued')
     
     if not queue_items:
@@ -230,7 +230,7 @@ def execute_pennsieve_downloads_multi(queue_items, dataset_config, database):
         with details_expander:
             if download_log:
                 log_df = pd.DataFrame(download_log)
-                st.dataframe(log_df, use_container_width=True, hide_index=True)
+                st.dataframe(log_df, width='stretch', hide_index=True)
     
     # Complete at 100%
     progress_bar.progress(1.0)
@@ -429,7 +429,7 @@ def execute_openneuro_downloads_multi(queue_items, dataset_config, database):
         with details_expander:
             if download_log:
                 log_df = pd.DataFrame(download_log)
-                st.dataframe(log_df, use_container_width=True, hide_index=True)
+                st.dataframe(log_df, width='stretch', hide_index=True)
     
     # Complete at 100%
     progress_bar.progress(1.0)
@@ -635,7 +635,7 @@ def execute_ssh_downloads_multi(queue_items, dataset_config, database, factory):
         with details_expander:
             if download_log:
                 log_df = pd.DataFrame(download_log)
-                st.dataframe(log_df, use_container_width=True, hide_index=True)
+                st.dataframe(log_df, width='stretch', hide_index=True)
     
     # Complete at 100%
     progress_bar.progress(1.0)
@@ -800,7 +800,7 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     with details_expander:
         if upload_log:
             log_df = pd.DataFrame(upload_log)
-            st.dataframe(log_df, use_container_width=True, hide_index=True)
+            st.dataframe(log_df, width='stretch', hide_index=True)
     
     # Final status
     status_text.empty()
@@ -844,12 +844,8 @@ def execute_uploads(file_paths: List[str], dataset_name: str, remote_path: str,
     time.sleep(2)
 
 
-
-
 def page_downloads():
     """Download manager page."""
-    from app import get_available_sessions, render_breadcrumb, render_page_header  # lazy
-
     render_page_header('downloads', show_back_to_dashboard=True)
     render_breadcrumb('downloads')
     st.markdown('<h1 class="main-header">Download Manager</h1>', 
@@ -1053,7 +1049,7 @@ def page_downloads():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("Preview Filtered Results", use_container_width=True):
+            if st.button("Preview Filtered Results", width='stretch'):
                 # Apply demographic filters first
                 filtered_ids = metadata_filter.filter_subjects(filter_criteria)
                 
@@ -1104,7 +1100,7 @@ def page_downloads():
                             st.write(f"**Diagnosis**: {summary['demographics']['diagnosis']}")
         
         with col2:
-            if st.button("[Delete] Clear Filters", use_container_width=True):
+            if st.button("[Delete] Clear Filters", width='stretch'):
                 st.session_state.filtered_subject_ids = None
                 st.session_state.filter_active = False
                 st.rerun()
@@ -1172,7 +1168,7 @@ def page_downloads():
     
     try:
         available_space = check_available_space('.')
-    except:
+    except Exception:
         available_space = 0
     
     col1, col2, col3, col4 = st.columns(4)
@@ -1212,7 +1208,7 @@ def page_downloads():
     
     with col1:
         button_label = "Select Filtered Subjects" if filter_active else "Select All Subjects"
-        if st.button(button_label, use_container_width=True):
+        if st.button(button_label, width='stretch'):
             # Add subjects' scans to download queue (respecting filters)
             added_count = 0
             skipped_count = 0
@@ -1273,7 +1269,7 @@ def page_downloads():
     
     with col2:
         button_label = "Select Complete (Filtered)" if filter_active else "Select Complete Only"
-        if st.button(button_label, use_container_width=True):
+        if st.button(button_label, width='stretch'):
             # Add only subjects with both 2WK and 6MO sessions (respecting filters)
             added_count = 0
             skipped_count = 0
@@ -1386,7 +1382,7 @@ def page_downloads():
         # Display table
         st.dataframe(
             df_queue,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=300
         )
@@ -1403,7 +1399,7 @@ def page_downloads():
                 )
             
             with col2:
-                if st.button("Remove Selected", use_container_width=True, key="remove_single_item"):
+                if st.button("Remove Selected", width='stretch', key="remove_single_item"):
                     if item_to_remove:
                         item_id = int(item_to_remove.split(':')[0])
                         success = st.session_state.db.execute_query(
@@ -1419,7 +1415,7 @@ def page_downloads():
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("Remove All Failed", use_container_width=True):
+                if st.button("Remove All Failed", width='stretch'):
                     removed = st.session_state.db.execute_query(
                         "DELETE FROM download_queue WHERE status = 'failed'"
                     )
@@ -1427,7 +1423,7 @@ def page_downloads():
                     st.rerun()
             
             with col2:
-                if st.button("Remove All Completed", use_container_width=True):
+                if st.button("Remove All Completed", width='stretch'):
                     removed = st.session_state.db.execute_query(
                         "DELETE FROM download_queue WHERE status = 'completed'"
                     )
@@ -1435,7 +1431,7 @@ def page_downloads():
                     st.rerun()
             
             with col3:
-                if st.button("Retry All Failed", use_container_width=True):
+                if st.button("Retry All Failed", width='stretch'):
                     st.session_state.db.execute_query(
                         "UPDATE download_queue SET status = 'queued', error_message = NULL WHERE status = 'failed'"
                     )
@@ -1459,14 +1455,14 @@ def page_downloads():
         with col1:
             if st.button("Start Downloads", 
                         type="primary",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=stats['queued'] == 0):
                 # Execute actual downloads using Pennsieve Agent
                 execute_downloads(dm, st.session_state.db)
         
         with col2:
             if st.button("Pause All",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=stats['downloading'] == 0):
                 dm.pause_downloads()
                 toast_note("Downloads paused")
@@ -1474,7 +1470,7 @@ def page_downloads():
         
         with col3:
             if st.button("Resume",
-                        use_container_width=True,
+                        width='stretch',
                         disabled=stats['paused'] == 0):
                 dm.resume_downloads()
                 toast_ok("Downloads resumed")
@@ -1482,7 +1478,7 @@ def page_downloads():
         
         with col4:
             if st.button("Clear Queue",
-                        use_container_width=True):
+                        width='stretch'):
                 cleared = dm.clear_queue('queued')
                 toast_ok(f"Cleared {cleared} queued item(s)")
                 st.rerun()
@@ -1514,10 +1510,10 @@ def page_downloads():
     # Get recent sessions from metadata table
     if st.session_state.db:
         sessions = st.session_state.db.execute_query("""
-            SELECT key, value, created_date 
-            FROM metadata 
+            SELECT key, value, updated_at
+            FROM metadata
             WHERE key LIKE 'download_session_%' OR key LIKE 'upload_session_%'
-            ORDER BY created_date DESC 
+            ORDER BY updated_at DESC
             LIMIT 20
         """)
         
@@ -1531,19 +1527,19 @@ def page_downloads():
                     history_data.append({
                         'Type': f"{'' if session_type == 'Download' else ''} {session_type}",
                         'Platform': session_data.get('platform', 'Unknown').title(),
-                        'Timestamp': session_data.get('timestamp', session['created_date'])[:19],
+                        'Timestamp': session_data.get('timestamp', session['updated_at'])[:19],
                         'Success': session_data.get('successful', 0),
                         'Failed': session_data.get('failed', 0),
                         'Duration': f"{int(session_data.get('duration', 0) // 60)}m {int(session_data.get('duration', 0) % 60)}s",
                         'Avg Speed': f"{session_data.get('avg_speed_mbps', 0):.2f} MB/s" if session_data.get('avg_speed_mbps') else 'N/A'
                     })
-                except:
+                except Exception:
                     pass
             
             if history_data:
                 with st.expander("View Recent Sessions", expanded=False):
                     history_df = pd.DataFrame(history_data)
-                    st.dataframe(history_df, use_container_width=True, hide_index=True)
+                    st.dataframe(history_df, width='stretch', hide_index=True)
                     
                     if st.button("[Delete] Clear History", key="clear_history"):
                         st.session_state.db.execute_query("""
@@ -1646,7 +1642,7 @@ def page_downloads():
                             }
                             for f in files_in_dir[:50]  # Show first 50
                         ])
-                        st.dataframe(preview_df, use_container_width=True, hide_index=True)
+                        st.dataframe(preview_df, width='stretch', hide_index=True)
                         
                         if len(files_in_dir) > 50:
                             st.caption(f"Showing first 50 files. Total: {len(files_in_dir)}")
@@ -1703,7 +1699,7 @@ def page_downloads():
             upload_button = st.button(
                 f" Upload {len(file_paths_to_upload) if file_paths_to_upload else 0} Files",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 disabled=not can_upload
             )
         

@@ -2,12 +2,11 @@
 from datetime import datetime
 from typing import List
 import streamlit as st
+from views.common import display_session_scans, render_breadcrumb, render_page_header
 
 
 def page_subjects():
     """Subject browser page (v1.5+ supports multi-dataset)."""
-    from app import render_breadcrumb, render_page_header  # lazy: avoid circular import
-
     render_page_header('subjects', show_back_to_dashboard=True)
     render_breadcrumb('subjects')
     st.markdown('<h1 class="main-header">Subjects Browser</h1>', 
@@ -189,7 +188,7 @@ def page_subjects():
     # Display table with selection
     st.dataframe(
         df,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         height=400
     )
@@ -219,7 +218,7 @@ def page_subjects():
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        if st.button("View Details", use_container_width=True):
+        if st.button("View Details", width='stretch'):
             chosen = paginated_subjects[selected_idx]
             st.session_state.selected_subject = chosen['subject_id']
             st.session_state.selected_subject_dataset = chosen.get('dataset_id')
@@ -227,7 +226,7 @@ def page_subjects():
             st.rerun()
     
     with col2:
-        if st.button("Export Filtered List", use_container_width=True):
+        if st.button("Export Filtered List", width='stretch'):
             from src.utils import export_to_csv
             csv = df.to_csv(index=False)
             st.download_button(
@@ -238,12 +237,8 @@ def page_subjects():
             )
 
 
-
-
 def page_subject_detail():
     """Subject detail page."""
-    from app import display_session_scans, render_breadcrumb  # lazy: avoid circular import
-
     subject_id = st.session_state.selected_subject
     
     if not subject_id:
@@ -262,7 +257,7 @@ def page_subject_detail():
         st.markdown(f'<h1 class="main-header">Subject: {subject_id}</h1>', 
                     unsafe_allow_html=True)
     with col2:
-        if st.button("<- Back to Subjects", use_container_width=True):
+        if st.button("<- Back to Subjects", width='stretch'):
             st.session_state.current_page = 'subjects'
             st.rerun()
     
@@ -302,7 +297,7 @@ def page_subject_detail():
     with col3:
         st.write("")
         st.write("")
-        if st.button("Update QC Status", use_container_width=True):
+        if st.button("Update QC Status", width='stretch'):
             success = st.session_state.db.update_subject_qc(
                 subject_id=subject_id,
                 qc_status=new_qc_status,

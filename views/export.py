@@ -5,12 +5,11 @@ from typing import List
 import pandas as pd
 import streamlit as st
 from src.ui_calm import expected_empty
+from views.common import get_subject_session_columns, render_breadcrumb, render_page_header
 
 
 def page_export():
     """Export page with cohort export functionality."""
-    from app import get_subject_session_columns, render_breadcrumb, render_page_header  # lazy
-
     render_page_header('export', show_back_to_dashboard=True)
     render_breadcrumb('export')
     st.markdown('<h1 class="main-header">Export Data</h1>', 
@@ -139,7 +138,7 @@ def page_export():
             st.write("Export QC status, notes, and review history for all subjects")
     
         with col2:
-            if st.button("Export QC Results", use_container_width=True):
+            if st.button("Export QC Results", width='stretch'):
                 # Get all subjects with QC data
                 subjects = st.session_state.db.get_all_subjects()
                 
@@ -175,7 +174,7 @@ def page_export():
                         data=csv,
                         file_name=f"qc_results_{timestamp}.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
                     
                     st.success(f"Ready to download {len(export_data)} QC records")
@@ -189,7 +188,7 @@ def page_export():
         
         with col1:
             st.write("**All Subjects**")
-            if st.button("Export All", use_container_width=True, key="export_all"):
+            if st.button("Export All", width='stretch', key="export_all"):
                 subjects = st.session_state.db.get_all_subjects()
                 
                 if subjects:
@@ -216,14 +215,14 @@ def page_export():
                         data=csv,
                         file_name=f"all_subjects_{timestamp}.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_all"
                     )
         
         with col2:
             st.write("**Complete Subjects**")
             st.caption("2+ sessions")
-            if st.button("Export Complete", use_container_width=True, key="export_complete"):
+            if st.button("Export Complete", width='stretch', key="export_complete"):
                 subjects = st.session_state.db.get_all_subjects()
                 
                 # Filter complete subjects (2+ sessions)
@@ -259,7 +258,7 @@ def page_export():
                         data=csv,
                         file_name=f"complete_subjects_{timestamp}.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_complete"
                     )
                     
@@ -270,7 +269,7 @@ def page_export():
         with col3:
             st.write("**Flagged Subjects**")
             st.caption("Needs review")
-            if st.button("Export Flagged", use_container_width=True, key="export_flagged"):
+            if st.button("Export Flagged", width='stretch', key="export_flagged"):
                 subjects = st.session_state.db.get_all_subjects()
                 
                 # Filter flagged subjects
@@ -304,7 +303,7 @@ def page_export():
                         data=csv,
                         file_name=f"flagged_subjects_{timestamp}.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_flagged"
                     )
                     
@@ -324,7 +323,7 @@ def page_export():
             st.write("Export download queue status and history")
         
         with col2:
-            if st.button("Export Downloads", use_container_width=True):
+            if st.button("Export Downloads", width='stretch'):
                 # Get download queue items
                 query = """
                     SELECT 
@@ -366,7 +365,7 @@ def page_export():
                         data=csv,
                         file_name=f"download_history_{timestamp}.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width='stretch',
                         key="download_history"
                     )
                     

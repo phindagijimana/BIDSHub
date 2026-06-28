@@ -4,12 +4,11 @@ from pathlib import Path
 import streamlit as st
 from src.database import Database
 from src.ui_calm import toast_ok
+from views.common import render_breadcrumb, render_page_header
 
 
 def page_viewer():
     """Standalone NIfTI Viewer page with file browser (v3.1.2+)."""
-    from app import render_breadcrumb, render_page_header  # lazy: avoid circular import
-
     render_page_header('viewer', show_back_to_dashboard=True)
     render_breadcrumb('viewer')
     st.markdown('<h1 class="main-header">NIfTI Viewer</h1>', 
@@ -81,7 +80,7 @@ def page_viewer():
                         st.markdown("")
                         if selected_file:
                             file_path_input = os.path.join(current_dir, selected_file)
-                            if st.button("Load in Viewer →", use_container_width=True, type="primary", key="viewer_load_fs_pick"):
+                            if st.button("Load in Viewer →", width='stretch', type="primary", key="viewer_load_fs_pick"):
                                 st.session_state.viewer_selected_file = file_path_input
                                 st.session_state.viewer_file_loaded = True
                                 st.rerun()
@@ -94,7 +93,7 @@ def page_viewer():
         
         if file_path_input and os.path.exists(file_path_input):
             st.caption(f"File exists: {Path(file_path_input).name}")
-            if st.button("Load from Path →", use_container_width=True, type="secondary", key="viewer_load_fs_path"):
+            if st.button("Load from Path →", width='stretch', type="secondary", key="viewer_load_fs_path"):
                 st.session_state.viewer_selected_file = file_path_input
                 st.session_state.viewer_file_loaded = True
                 st.rerun()
@@ -211,7 +210,7 @@ def page_viewer():
                         st.caption(f"File: {Path(selected_scan['file_path']).name}")
                         st.caption(f"Modality: {selected_scan.get('modality', 'N/A')}")
                         st.caption(f"Suffix: {selected_scan.get('suffix', 'N/A')}")
-                    if st.button("Load in Viewer →", use_container_width=True, type="primary", key="viewer_load_indexed"):
+                    if st.button("Load in Viewer →", width='stretch', type="primary", key="viewer_load_indexed"):
                         st.session_state.viewer_selected_file = selected_scan['file_path']
                         st.session_state.viewer_dataset_id = selected_dataset_id
                         st.session_state.viewer_dataset_platform = selected_dataset.get('platform') if selected_dataset else None

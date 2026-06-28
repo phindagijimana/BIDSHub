@@ -7,12 +7,11 @@ import streamlit as st
 from src.automated_qc import AutomatedQC
 from src.pennsieve_agent import PennsieveAgent
 from src.ui_calm import expected_empty
+from views.common import render_breadcrumb, render_page_header
 
 
 def page_qc():
     """QC dashboard page."""
-    from app import render_breadcrumb, render_page_header  # lazy: avoid circular import
-
     render_page_header('qc', show_back_to_dashboard=True)
     render_breadcrumb('qc')
     st.markdown('<h1 class="main-header">Quality Control Dashboard</h1>', 
@@ -53,7 +52,6 @@ def page_qc():
 
 def render_manual_qc_tab(qc_mgr):
     """Render manual QC tab for human review."""
-    
     # QC Overview
     st.markdown('<h2 class="section-header">Manual QC Overview</h2>', 
                 unsafe_allow_html=True)
@@ -156,7 +154,7 @@ def render_manual_qc_tab(qc_mgr):
         # Display table
         st.dataframe(
             df,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=300
         )
@@ -176,7 +174,7 @@ def render_manual_qc_tab(qc_mgr):
         with col2:
             st.write("")
             st.write("")
-            if st.button("Apply to Filtered", use_container_width=True):
+            if st.button("Apply to Filtered", width='stretch'):
                 subject_ids = [s['subject_id'] for s in subjects]
                 count = qc_mgr.bulk_update_qc(
                     subject_ids=subject_ids,
@@ -189,7 +187,7 @@ def render_manual_qc_tab(qc_mgr):
         with col3:
             st.write("")
             st.write("")
-            if st.button("Export QC Report", use_container_width=True):
+            if st.button("Export QC Report", width='stretch'):
                 report = qc_mgr.export_qc_report()
                 
                 # Convert to CSV
@@ -263,7 +261,6 @@ def render_manual_qc_tab(qc_mgr):
 
 def render_automated_qc_tab(auto_qc):
     """Render automated QC tab for computer checks."""
-    
     # Automated QC Overview
     st.markdown('<h2 class="section-header">Automated QC Overview</h2>', 
                 unsafe_allow_html=True)
@@ -315,7 +312,7 @@ def render_automated_qc_tab(auto_qc):
         st.markdown("Run automated quality checks on all subjects to detect technical issues")
     
     with col2:
-        if st.button("Run Automated QC", type="primary", use_container_width=True):
+        if st.button("Run Automated QC", type="primary", width='stretch'):
             subjects = st.session_state.db.get_all_subjects()
             subject_ids = [s['subject_id'] for s in subjects]
             
@@ -367,7 +364,7 @@ def render_automated_qc_tab(auto_qc):
                 results = json.loads(results_json) if results_json else {}
                 issue_count = len(results.get('issues', []))
                 warning_count = len(results.get('warnings', []))
-            except:
+            except Exception:
                 issue_count = 0
                 warning_count = 0
             
@@ -380,7 +377,7 @@ def render_automated_qc_tab(auto_qc):
             })
         
         df_flagged = pd.DataFrame(flagged_data)
-        st.dataframe(df_flagged, use_container_width=True, hide_index=True)
+        st.dataframe(df_flagged, width='stretch', hide_index=True)
         
         # Allow user to view details
         selected_subject = st.selectbox(
@@ -389,7 +386,7 @@ def render_automated_qc_tab(auto_qc):
             key="auto_qc_selected_subject"
         )
         
-        if st.button("View Details", use_container_width=True):
+        if st.button("View Details", width='stretch'):
             st.session_state.selected_subject = selected_subject
             st.session_state.current_page = 'subject_detail'
             st.rerun()
@@ -422,7 +419,6 @@ def render_automated_qc_tab(auto_qc):
 
 def render_pennsieve_sync_tab(qc_mgr):
     """Render Pennsieve QC sync tab for uploading QC results (v3.1+)."""
-    
     # Sync Overview
     st.markdown('<h2 class="section-header">QC Sync Status</h2>', 
                 unsafe_allow_html=True)
@@ -526,7 +522,7 @@ def render_pennsieve_sync_tab(qc_mgr):
             })
         
         if preview_data:
-            st.dataframe(pd.DataFrame(preview_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(preview_data), width='stretch', hide_index=True)
             if len(unsynced_scans) > 10:
                 st.caption(f"Showing 10 of {len(unsynced_scans)} unsynced records")
     
@@ -539,7 +535,7 @@ def render_pennsieve_sync_tab(qc_mgr):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button(" Export QC CSV", use_container_width=True, disabled=(unsynced_count == 0)):
+        if st.button(" Export QC CSV", width='stretch', disabled=(unsynced_count == 0)):
             if unsynced_count == 0:
                 st.warning("No QC results to export")
             else:
@@ -568,7 +564,7 @@ def render_pennsieve_sync_tab(qc_mgr):
                             data=f,
                             file_name=csv_filename,
                             mime='text/csv',
-                            use_container_width=True
+                            width='stretch'
                         )
                 else:
                     st.error("Failed to export QC CSV")
@@ -582,7 +578,7 @@ def render_pennsieve_sync_tab(qc_mgr):
         
         if st.button("Push to Pennsieve", 
                     type="primary", 
-                    use_container_width=True,
+                    width='stretch',
                     disabled=upload_disabled):
             
             if not has_csv:

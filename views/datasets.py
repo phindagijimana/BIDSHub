@@ -11,12 +11,11 @@ from src.error_messages import ErrorMessages
 from src.openneuro_agent import OpenNeuroAgent, check_openneuro_connection
 from src.pennsieve_client import PennsieveClient
 from src.ui_calm import render_xnat_beta_notice
+from views.common import render_breadcrumb, render_page_header
 
 
 def page_setup():
     """Setup page for first-time configuration."""
-    from app import render_breadcrumb  # lazy: avoid circular import
-
     render_breadcrumb('setup')
     st.markdown('<h1 class="main-header">BIDSHub - Setup</h1>', 
                 unsafe_allow_html=True)
@@ -169,13 +168,13 @@ def page_setup():
         initialize_button = st.button(
             "Initialize Dataset",
             type="primary",
-            use_container_width=True,
+            width='stretch',
             disabled=not config_valid
         )
     
     with col2:
         if st.session_state.setup_complete:
-            if st.button("Skip Setup", use_container_width=True):
+            if st.button("Skip Setup", width='stretch'):
                 st.session_state.current_page = 'dashboard'
                 st.rerun()
     
@@ -412,8 +411,6 @@ def page_setup():
 
 def page_manage_datasets():
     """Dataset management page - add/edit/remove datasets (v1.5+)."""
-    from app import render_breadcrumb, render_page_header  # lazy: avoid circular import
-
     render_page_header('manage_datasets', show_back_to_dashboard=True)
     render_breadcrumb('manage_datasets')
     st.markdown('<h1 class="main-header">Manage Datasets</h1>', 
@@ -489,7 +486,7 @@ def page_manage_datasets():
                 
                 with col1:
                     if st.button("[Sync] Sync", key=f"sync_{dataset['id']}", 
-                               use_container_width=True):
+                               width='stretch'):
                         # Sync subjects from platform (v3.1.1+: supports all platforms)
                         if dataset['platform'] == 'local':
                             st.info("Local datasets are indexed automatically")
@@ -602,14 +599,14 @@ def page_manage_datasets():
                     new_status = "inactive" if dataset['status'] == "active" else "active"
                     if st.button(f"{'[Pause] Deactivate' if dataset['status'] == 'active' else '[Start] Activate'}", 
                                key=f"toggle_{dataset['id']}", 
-                               use_container_width=True):
+                               width='stretch'):
                         st.session_state.db.update_dataset(dataset['id'], status=new_status)
                         st.success(f"Dataset {new_status}")
                         st.rerun()
                 
                 with col3:
                     if st.button("[Delete] Remove", key=f"remove_{dataset['id']}", 
-                               use_container_width=True,
+                               width='stretch',
                                type="secondary"):
                         # Confirm deletion
                         if len(subjects) > 0:
@@ -632,7 +629,7 @@ def page_manage_datasets():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("Check Integrity", use_container_width=True):
+        if st.button("Check Integrity", width='stretch'):
             with st.spinner("Checking database integrity..."):
                 issues = st.session_state.db.check_integrity()
                 total_issues = sum(issues.values())
@@ -649,7 +646,7 @@ def page_manage_datasets():
                     st.session_state.show_integrity_warning = True
     
     with col2:
-        if st.button(" Run Maintenance", use_container_width=True,
+        if st.button(" Run Maintenance", width='stretch',
                     disabled=not st.session_state.get('integrity_issues')):
             with st.spinner("Running database maintenance..."):
                 report = st.session_state.db.run_integrity_maintenance(auto_fix=True)
@@ -897,7 +894,7 @@ def page_manage_datasets():
             help="Check if dataset follows BIDS specification"
         )
         
-        submit = st.form_submit_button("[+] Add Dataset", type="primary", use_container_width=True)
+        submit = st.form_submit_button("[+] Add Dataset", type="primary", width='stretch')
         
         if submit:
             # Validate inputs based on platform

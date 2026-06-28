@@ -132,14 +132,14 @@ def page_transfer():
         
         # Transfer right button
         if st.button("→", key="transfer_right", help="Transfer selected subjects to destination", 
-                    use_container_width=True, type="primary"):
+                    width='stretch', type="primary"):
             st.session_state.transfer_direction = 'right'
         
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Transfer left button (for bidirectional)
         if st.button("←", key="transfer_left", help="Transfer from destination to source",
-                    use_container_width=True):
+                    width='stretch'):
             st.session_state.transfer_direction = 'left'
     
     # RIGHT PANE: Destination Browser
@@ -253,7 +253,7 @@ def page_transfer():
         st.info(f"{platform_emojis.get(source_dataset['platform'], '')} {source_dataset['name']} → {platform_emojis.get(dest_dataset['platform'], '')} {dest_dataset['name']}")
         
         # Execute button
-        if st.button("Start Transfer", type="primary", use_container_width=True, key="execute_transfer"):
+        if st.button("Start Transfer", type="primary", width='stretch', key="execute_transfer"):
             execute_transfer(
                 source_dataset=source_dataset,
                 dest_dataset=dest_dataset,
@@ -302,7 +302,7 @@ def page_transfer():
             
             import pandas as pd
             history_df = pd.DataFrame(history_data)
-            st.dataframe(history_df, use_container_width=True, hide_index=True)
+            st.dataframe(history_df, width='stretch', hide_index=True)
         else:
             st.info("No transfer history yet")
     except Exception as e:
@@ -612,7 +612,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
                     # Cleanup temp file
                     try:
                         temp_file.unlink()
-                    except:
+                    except Exception:
                         pass
                 
                 if success:
@@ -672,7 +672,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
             if transfer_log:
                 import pandas as pd
                 log_df = pd.DataFrame(transfer_log)
-                st.dataframe(log_df, use_container_width=True, hide_index=True)
+                st.dataframe(log_df, width='stretch', hide_index=True)
     
     # Complete
     progress_bar.progress(1.0)
@@ -725,7 +725,7 @@ def execute_transfer(source_dataset: Dict, dest_dataset: Dict, subject_ids: List
         temp_dir = Path('./data/temp_transfer')
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
-    except:
+    except Exception:
         pass
     
     time.sleep(2)
